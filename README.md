@@ -10,8 +10,10 @@ selectors in ignored local context, resolves the requested app and destination,
 and routes current command mechanics to the installed ASC skills.
 
 It never stores credentials or standing release authority. Exact release
-requests authorize only their stated TestFlight or App Store lane. Git tags,
-tag pushes, and GitHub releases remain separate effects.
+requests authorize only their stated TestFlight or App Store lane. When the
+canonical workflow changes tracked release state, the skill commits the exact
+generated state and reconciles that commit with the verified upstream. Git
+tags, tag pushes, and GitHub releases remain separate effects.
 
 ## Local Review Until Clean
 

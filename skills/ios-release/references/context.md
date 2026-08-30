@@ -82,6 +82,14 @@ The doctor returns one state:
 
 `ready` does not mean the app is ready to release. The skill must still verify repository gates and live ASC identity before remote effects.
 
+## Bootstrap during a release
+
+A release request may initialize missing context without a separate configuration request. Run `init`, gather repository and read-only App Store Connect evidence, then write only stable selectors that have one answer.
+
+Continue the release when `doctor` reports `ready`. Missing context alone is not a release blocker.
+
+Stop before remote effects when the app, profile, destination, or another stable selector remains ambiguous. Do not install a missing skill or command as part of context bootstrap.
+
 ## Maintenance
 
 Refresh context when the user requests it, the doctor reports a problem, a profile or app identity changes, a project moves, or live pre-effect evidence conflicts with local selectors.

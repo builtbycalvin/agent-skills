@@ -9,7 +9,9 @@ Own the release request from project setup through exact remote readback. The us
 
 Keep stable app selectors in the ignored `.ios-release/context.json` file. Keep credentials, versions, builds, submissions, observations, and release authority out of that file.
 
-Resolve all referenced skills from the current skill catalog. Do not hardcode installation paths. Use `asc-cli-usage` for current command discovery and flags. Run `--help` before relying on an ASC command shape.
+Resolve every required leaf skill before changing the repository or App Store Connect. Do not hardcode installation paths or install missing skills. Return `blocked` with the missing skill names and installation guidance.
+
+Use `asc-cli-usage` for current command discovery and flags. Run `--help` before relying on an ASC command shape.
 
 ## Classify the request
 
@@ -27,6 +29,8 @@ Choose one intent. Use the narrowest meaning supported by the user's words.
 | stage for the App Store | Prepare and upload when needed, stage the exact version and build, apply requested canonical metadata, and validate. Do not submit to review. |
 | submit to App Review or release to the App Store | Prepare and upload when needed, stage the exact version and build, validate, and create one review submission. |
 
+An upload or release request authorizes repository reconciliation only when the canonical workflow changes tracked release state. Reconciliation may commit those exact changes and fast-forward push the release commit to the branch and upstream verified before the release. It never authorizes pushing pre-existing commits or unrelated changes.
+
 Creating a Git tag, pushing a tag, and creating a GitHub release are separate effects. TestFlight and App Store language never implies them.
 
 The bare word `release` uses `defaultIntent` only when the user explicitly set that field. Without it, ask whether the destination is internal TestFlight, external TestFlight, App Store staging, or App Review. This is an authority choice. Do not ask the user for facts that repository or ASC evidence can answer.
@@ -38,9 +42,9 @@ An exact release imperative authorizes the effects in its selected row. State th
 Read [the release-context reference](references/context.md) for configuration, maintenance, missing context, or conflicts.
 
 1. Resolve the Git root. Read its `AGENTS.md`, canonical project files, and release documentation before inspecting generated Xcode output.
-2. Resolve this skill's `scripts/context.mjs` relative to this file. Run `node scripts/context.mjs init --repo <root>` for configuration requests. This creates only ignored local state and updates the repository's local Git exclude file.
+2. Resolve this skill's `scripts/context.mjs` relative to this file. Run `node scripts/context.mjs init --repo <root>` for configuration requests. A release request may also run it when context is absent. This creates only ignored local state and updates the repository's local Git exclude file.
 3. Gather repository evidence for app names, source roots, Xcode projects or workspaces, schemes, configurations, bundle IDs, team IDs, platforms, metadata paths, and release checks.
-4. Inspect `asc auth status --output json` without printing credential material. Never call `asc auth switch`. Pass a named profile explicitly to every app-scoped ASC command.
+4. Inspect `asc auth status --output json` without printing credential material. Never call `asc auth switch`. Pass the configured named profile explicitly to every app-scoped ASC command, including commands inside a repository wrapper. Block when a canonical wrapper cannot accept the named profile.
 5. Resolve apps by exact bundle ID through `asc-id-resolver`. Resolve TestFlight groups only when configuration or the selected intent needs them.
 6. Write only stable, unambiguous selectors to `.ios-release/context.json`. Preserve configured identity when fresh evidence conflicts. Record the conflict instead of overwriting it.
 7. Run `node scripts/context.mjs doctor --repo <root>`. Use `--app <key>` when validating one app. Resolve every `incomplete` item that evidence can answer. Ask only for choices that remain unresolved.
@@ -63,16 +67,19 @@ Before every remote effect, verify the named profile can read the configured app
 
 ## Build the release plan
 
+For lanes that can change tracked release state, read [the repository reconciliation reference](references/repository.md).
+
 State these values before the first remote effect:
 
-- repository and exact Git commit;
+- repository, branch, upstream, `sourceCommit`, and their synchronization state;
 - app key, display name, bundle ID, ASC app ID, platform, and named profile;
 - Xcode container, scheme, configuration, version, and build provenance;
+- expected tracked release-state paths and the planned `releaseCommit`;
 - destination and exact TestFlight group when applicable;
 - allowed effects and excluded adjacent effects;
 - required repository checks and ASC readbacks.
 
-Stop when identity, intent, build provenance, or destination remains ambiguous. A dirty checkout is not automatically forbidden. Apply the repository's release policy and explain any provenance risk.
+Stop when identity, intent, build provenance, or destination remains ambiguous. Apply the repository's release policy. A fresh release that will change tracked state requires a clean attached branch whose `HEAD` equals its fetched upstream. Do not merge, rebase, switch branches, or include local commits to make it eligible.
 
 Resolve whether to reuse a verified existing build or create a fresh build from the user's request and repository policy. When both remain valid, ask before changing version or build numbers or uploading a new artifact.
 
@@ -96,20 +103,26 @@ Load only the skills needed for the resolved lane.
 
 Do not copy their command recipes into this skill. Do not use `asc-workflow` by default.
 
+Complete this routing before context creation, dependency installation, version changes, builds, or remote effects. If a required leaf skill is unavailable, stop. Do not invoke `asc install-skills`, a package manager, or another installer unless the user separately authorizes installation.
+
 ## Execute and reconcile
 
 Follow the owning skill's dry-run, validation, and confirmation rules. Preserve the effect boundary from this request when a leaf skill supports broader operations.
 
 Use exact IDs after resolution. Do not rediscover an uploaded build through an unqualified latest-build query.
 
+When the workflow changes tracked release state, generate and stage every canonical output before archive. Record the staged Git tree, archive and export that exact tree, then commit the complete allowed path set before upload. Record the pre-change commit as `sourceCommit` and the new clean commit as `releaseCommit`. Require the release commit's tree to equal the archived tree.
+
 After each remote effect, read back the exact app, build, version, group, or submission state. A successful command exit, dry run, or agent report is not completion proof.
 
-If a command times out or returns malformed output, treat its effect as unknown. Inspect live state before retrying. Continue from observed state instead of restarting the lane.
+After the exact remote readback succeeds, fast-forward push only `releaseCommit` to the branch and upstream verified at the start. Fetch or query that exact remote ref and require it to equal `releaseCommit`. A rejected push never authorizes a merge, rebase, force-push, pull request, or another upload.
+
+If a command times out or returns malformed output, treat its effect as unknown. Inspect live state before retrying. Continue from observed state instead of restarting the lane. After an upload attempt, never upload the same version and build again while its remote outcome remains unknown.
 
 Return one outcome:
 
-- `completed` with exact remote IDs and readback;
-- `partial` with completed effects, unknown effects, current remote state, and one safe next action;
+- `completed` with `sourceCommit`, `releaseCommit`, exact remote IDs, remote readback, and verified upstream equality when tracked state changed;
+- `partial` with separate remote and repository outcomes, completed effects, unknown effects, current live state, and one safe next action;
 - `blocked` with the conflict or missing authority;
 - `configured` with the context path and remaining setup choices.
 
