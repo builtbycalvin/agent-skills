@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ios-release-configuration-v2",
+  "title": "Portable iOS release configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "apps"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "defaultApp": { "type": "string", "minLength": 1 },
+    "apps": {
+      "type": "object",
+      "minProperties": 0,
+      "additionalProperties": { "$ref": "#/$defs/app" }
+    }
+  },
+  "$defs": {
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])[^\\\\r\\n]*$" },
+    "locale": { "type": "string", "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})+$" },
+    "group": {
+      "type": "object", "additionalProperties": false, "required": ["id", "name"],
+      "properties": { "id": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F-]{27}$" }, "name": { "type": "string", "minLength": 1 } }
+    },
+    "xcode": {
+      "type": "object", "additionalProperties": false, "required": ["scheme", "configuration"],
+      "properties": { "project": { "$ref": "#/$defs/path" }, "workspace": { "$ref": "#/$defs/path" }, "scheme": { "type": "string", "minLength": 1 }, "configuration": { "type": "string", "minLength": 1 } },
+      "oneOf": [{ "required": ["project"], "not": { "required": ["workspace"] } }, { "required": ["workspace"], "not": { "required": ["project"] } }]
+    },
+    "releaseNotes": {
+      "type": "object", "additionalProperties": false, "required": ["archiveDirectory", "sourceLocale", "locales", "promotionalText"],
+      "properties": { "archiveDirectory": { "$ref": "#/$defs/path" }, "sourceLocale": { "$ref": "#/$defs/locale" }, "locales": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/locale" } }, "tagPrefix": { "type": "string", "minLength": 1 }, "tone": { "type": "string", "minLength": 1 }, "promotionalText": { "enum": ["preserve", "suggest"] } }
+    },
+    "app": {
+      "type": "object", "additionalProperties": false,
+      "required": ["bundleId", "appId", "platform", "xcode", "releaseNotes"],
+      "properties": {
+        "displayName": { "type": "string", "minLength": 1 }, "aliases": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }, "sourceRoot": { "$ref": "#/$defs/path" }, "bundleId": { "type": "string", "minLength": 1 }, "appId": { "type": "string", "minLength": 1 }, "platform": { "const": "IOS" }, "xcode": { "$ref": "#/$defs/xcode" }, "testflight": { "type": "object", "additionalProperties": false, "properties": { "internalGroups": { "type": "array", "items": { "$ref": "#/$defs/group" } }, "externalGroups": { "type": "array", "items": { "$ref": "#/$defs/group" } } } }, "metadataDirectory": { "$ref": "#/$defs/path" }, "releaseNotes": { "$ref": "#/$defs/releaseNotes" }, "defaultIntent": { "enum": ["internal-testflight", "external-testflight", "app-store-stage", "app-store-submit"] }
+      }
+    }
+  }
+}

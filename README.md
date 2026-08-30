@@ -5,9 +5,10 @@ Reusable coding-agent workflows by [Calvin](https://github.com/builtbycalvin).
 ## iOS Release
 
 [ios-release](skills/ios-release/SKILL.md) configures, inspects, prepares, and
-releases iOS apps through one entry point. It keeps stable app
-selectors in ignored local context, resolves the requested app and destination,
-and routes current command mechanics to the installed ASC skills.
+releases iOS apps through one entry point. It keeps portable policy in tracked
+`.ios-release/config.json`, keeps the ASC profile binding in ignored
+`.ios-release/local.json`, resolves the app and version, and maintains one
+reviewable release-note archive for App Store and optional TestFlight copy.
 
 It never stores credentials or standing release authority. Exact release
 requests authorize only their stated TestFlight or App Store lane. When the
@@ -89,9 +90,11 @@ Release the configured app to an exact destination:
 $ios-release release this app to the internal TestFlight group.
 ```
 
-`ios-release` keeps stable app selectors in an ignored local context. It uses
-the installed ASC skills for current CLI mechanics. It does not persist
-credentials or release authority.
+`ios-release` recommends a marketing version when one is not supplied and asks
+for confirmation before changing it. App Store staging and submission require
+approved release notes for updates; TestFlight does not. It uses installed ASC
+skills for current CLI mechanics and does not persist credentials or release
+authority.
 
 Review and fix local changes until clean:
 

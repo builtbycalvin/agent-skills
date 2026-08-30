@@ -1,129 +1,109 @@
 ---
 name: ios-release
-description: "Configure, inspect, prepare, and release iOS apps through one agent entry point. Use when asked to set up a project for releases, maintain its local release context, upload a build, distribute through TestFlight, stage an App Store version, submit to App Review, or diagnose release state. Routes changing ASC mechanics to the installed asc-* skills."
+description: "Configure, inspect, prepare, and release iOS apps through one guided entry point. Use for release setup, version selection, release notes, builds, TestFlight, App Store staging, App Review submission, metadata scope, or release diagnosis. Routes changing ASC mechanics to the installed asc-* skills."
 ---
 
 # iOS release
 
-Own the release request from project setup through exact remote readback. The user does not need to choose an ASC skill.
+Own the request from repository setup through exact remote readback. Infer the app and release intent from evidence. Ask only when a remaining choice changes the target, version, copy, or allowed effect.
 
-Keep stable app selectors in the ignored `.ios-release/context.json` file. Keep credentials, versions, builds, submissions, observations, and release authority out of that file.
+Keep portable policy in tracked-candidate `.ios-release/config.json` and the machine's ASC profile binding in ignored `.ios-release/local.json`. Never store credentials, current versions or builds, readiness, approvals, observations, or standing release authority in either file.
 
-Resolve every required leaf skill before changing the repository or App Store Connect. Do not hardcode installation paths or install missing skills. Return `blocked` with the missing skill names and installation guidance.
+Resolve required leaf skills before changing the repository or App Store Connect. Do not hardcode skill installation paths or install missing skills. Return `blocked` with the missing skill names and installation guidance. Use `asc-cli-usage` for current commands and flags, and run the relevant `--help` before relying on a command shape.
 
-Use `asc-cli-usage` for current command discovery and flags. Run `--help` before relying on an ASC command shape.
+## Classify authority
 
-## Classify the request
+Choose the narrowest intent supported by the request.
 
-Choose one intent. Use the narrowest meaning supported by the user's words.
-
-| Request | Intent and authority |
+| Request | Authorized result |
 | --- | --- |
-| configure, set up, initialize | Inspect the project and ASC. Create or update ignored local context. No release effects. |
-| refresh, maintain, doctor | Reconcile ignored local context with current read-only evidence. No release effects. |
+| configure, set up, initialize | Inspect and create or update release configuration. No release effect. |
+| refresh, maintain, doctor | Reconcile configuration with read-only evidence. No release effect. |
 | check, inspect, status, diagnose, ready | Read-only release inspection. |
+| draft or update release notes | Create or revise the local archive and requested canonical metadata. No ASC write. |
 | prepare, build, archive | Local version, build, archive, and export work stated by the request. No upload. |
 | upload | Prepare an exact artifact when needed, then upload it. Do not distribute or submit. |
-| release to internal TestFlight | Prepare and upload when needed, then make the exact build available to the resolved internal group. Do not run beta review for an internal group. |
-| release to external TestFlight | Prepare and upload when needed, then complete the ASC steps required to make the exact build available to the resolved external group. Do not change testers or groups unless requested. |
-| stage for the App Store | Prepare and upload when needed, stage the exact version and build, apply requested canonical metadata, and validate. Do not submit to review. |
-| submit to App Review or release to the App Store | Prepare and upload when needed, stage the exact version and build, validate, and create one review submission. |
+| release to internal TestFlight | Prepare and upload when needed, then distribute the exact build to the resolved internal group. |
+| release to external TestFlight | Prepare and upload when needed, then complete beta review and distribute to the resolved external group. |
+| stage for the App Store | Prepare and upload when needed, require approved release notes, stage the exact version and build, apply authorized metadata, and validate. Do not submit. |
+| submit or release to the App Store | Prepare and upload when needed, require approved release notes, stage and validate the exact version and build, then create one review submission. |
+| update listing metadata or ASO | Audit and change only the named fields. This is separate from a routine release unless explicitly combined. |
 
-An upload or release request authorizes repository reconciliation only when the canonical workflow changes tracked release state. Reconciliation may commit those exact changes and fast-forward push the release commit to the branch and upstream verified before the release. It never authorizes pushing pre-existing commits or unrelated changes.
+The bare word `release` uses `defaultIntent` only when the user explicitly configured it. Otherwise ask for internal TestFlight, external TestFlight, App Store staging, or App Review. Creating or pushing a Git tag, creating a GitHub release, changing testers or groups, and rewriting listing metadata are separate effects.
 
-Creating a Git tag, pushing a tag, and creating a GitHub release are separate effects. TestFlight and App Store language never implies them.
+An exact imperative authorizes the effects in its row. State the exact effect plan before the first remote write. Do not ask for redundant confirmation when app, lane, version, copy, build provenance, and effects are already explicit or already approved during this run.
 
-The bare word `release` uses `defaultIntent` only when the user explicitly set that field. Without it, ask whether the destination is internal TestFlight, external TestFlight, App Store staging, or App Review. This is an authority choice. Do not ask the user for facts that repository or ASC evidence can answer.
+## Configure a project
 
-An exact release imperative authorizes the effects in its selected row. State the effect plan immediately before the first remote write. Do not ask for redundant confirmation when the app, destination, version, build provenance, and effects are already exact.
+Read [configuration.md](references/configuration.md).
 
-## Configure or maintain a project
+1. Resolve the Git root. Read repository instructions, canonical project files, generators, and release documentation before generated Xcode output.
+2. Run `node scripts/config.mjs init --repo <root>`. For V1, run migration in plan mode first. The helper creates the strict tracked and local split without overwriting existing files.
+3. Discover shipping apps, bundle IDs, App Store IDs, source roots, Xcode containers, schemes, release configurations, TestFlight groups, metadata paths, locales, tone, and existing note archives.
+4. Propose the portable configuration. During initial setup, select a repository-visible archive location using this order: documented convention, one existing safe archive, `release-notes/ios/<app-key>` for a multi-app repository, then `release-notes` for a single app. Ask only if multiple valid locations remain.
+5. Inspect `asc auth status --output json` without printing credential material. Never switch the active profile. Put only the chosen profile name in `local.json`, and pass it explicitly to every app-scoped command.
+6. Resolve app IDs through `asc-id-resolver`. Resolve groups only when setup or the selected lane needs them. Preserve configured identity and report a conflict when fresh evidence disagrees.
+7. Run `node scripts/config.mjs doctor --repo <root> [--app <key>]`. Resolve evidence-backed missing values and present user choices for the rest.
 
-Read [the release-context reference](references/context.md) for configuration, maintenance, missing context, or conflicts.
+Configuration is suitable to commit because it contains portable selectors and policy. `.ios-release/.gitignore` keeps `local.json`, backups, and future machine-local files ignored while exposing only `.gitignore` and `config.json`.
 
-1. Resolve the Git root. Read its `AGENTS.md`, canonical project files, and release documentation before inspecting generated Xcode output.
-2. Resolve this skill's `scripts/context.mjs` relative to this file. Run `node scripts/context.mjs init --repo <root>` for configuration requests. A release request may also run it when context is absent. This creates only ignored local state and updates the repository's local Git exclude file.
-3. Gather repository evidence for app names, source roots, Xcode projects or workspaces, schemes, configurations, bundle IDs, team IDs, platforms, metadata paths, and release checks.
-4. Inspect `asc auth status --output json` without printing credential material. Never call `asc auth switch`. Pass the configured named profile explicitly to every app-scoped ASC command, including commands inside a repository wrapper. Block when a canonical wrapper cannot accept the named profile.
-5. Resolve apps by exact bundle ID through `asc-id-resolver`. Resolve TestFlight groups only when configuration or the selected intent needs them.
-6. Write only stable, unambiguous selectors to `.ios-release/context.json`. Preserve configured identity when fresh evidence conflicts. Record the conflict instead of overwriting it.
-7. Run `node scripts/context.mjs doctor --repo <root>`. Use `--app <key>` when validating one app. Resolve every `incomplete` item that evidence can answer. Ask only for choices that remain unresolved.
+## Resolve the app and version
 
-Never store API keys, issuer IDs, private-key paths, tokens, passwords, environment values, versions, build IDs, submission IDs, a prior readiness claim, or release authority in `.ios-release/`.
+Resolve the app by explicit key, display name, or alias, then a unique `sourceRoot` containing the current path, then `defaultApp`, then the sole shipping app. Stop with evidence-backed candidates on ambiguity. Before any remote effect, verify that the named profile can read the configured app and that app ID, bundle ID, platform, and selected group match live ASC data.
 
-## Resolve one app
+Accept an explicit marketing version after checking repository and ASC conflicts. Otherwise recommend one version from current evidence:
 
-Resolve the target in this order:
+- use the repository version when it is already ahead of the newest shipped version;
+- recommend a patch for fixes and small maintenance work;
+- recommend a minor version for a new user-visible capability;
+- recommend a major version only when the user states a breaking or product-level reset.
 
-1. Use an app explicitly named in the current request when it matches one configured app key, display name, or alias.
-2. Use the configured app whose `sourceRoot` uniquely contains the current path.
-3. Use `defaultApp` when the request is inside the same repository.
-4. Use the sole configured or discovered shipping app.
-5. Otherwise stop and show the evidence-backed candidates.
+Show the current shipped version, repository version, evidence category, and recommendation. Obtain confirmation before changing a marketing version. Version confirmation does not authorize an upload, distribution, staging, or submission that the request did not already authorize.
 
-An explicit app that conflicts with the current repository is a targeting conflict. Do not jump to another repository or silently prefer the current checkout.
+## Prepare release copy
 
-Before every remote effect, verify the named profile can read the configured app. Verify that the app ID, bundle ID, platform, and selected TestFlight group still match live ASC data. Local context selects the target. It never proves current remote identity.
+Read [release-notes.md](references/release-notes.md). This skill owns the normalized release-note process. Do not require `ios-whats-new` or `asc-whats-new-writer`.
 
-## Build the release plan
+Determine the source range from the newest successfully shipped App Store version and its matching repository tag when live evidence can prove it. Do not use the newest uploaded or unshipped version as the baseline. If the shipped tag cannot be proved, present the proposed range and uncertainty before drafting.
 
-For lanes that can change tracked release state, read [the repository reconciliation reference](references/repository.md).
+Inspect user-provided bullets, canonical changelog or release artifacts, and user-visible changes in the source range. Exclude internal refactors, developer tooling, unshipped flags, speculation, and unsupported claims. Draft the source locale first, lead with the strongest user benefit, use concise scannable language, localize naturally, and enforce the 4,000-character App Store limit.
 
-State these values before the first remote effect:
+Store the approved normalized note set at `<archiveDirectory>/<marketingVersion>.md`. Use it to produce both the canonical App Store `whatsNew` fields and optional TestFlight What to Test copy. Do not maintain competing copies.
 
-- repository, branch, upstream, `sourceCommit`, and their synchronization state;
-- app key, display name, bundle ID, ASC app ID, platform, and named profile;
-- Xcode container, scheme, configuration, version, and build provenance;
-- expected tracked release-state paths and the planned `releaseCommit`;
-- destination and exact TestFlight group when applicable;
-- allowed effects and excluded adjacent effects;
-- required repository checks and ASC readbacks.
+For an App Store stage or submit of an update, run:
 
-Stop when identity, intent, build provenance, or destination remains ambiguous. Apply the repository's release policy. A fresh release that will change tracked state requires a clean attached branch whose `HEAD` equals its fetched upstream. Do not merge, rebase, switch branches, or include local commits to make it eligible.
+```text
+node scripts/release-notes.mjs check --repo <root> --app <key> --version <version> --source-commit <full-sha>
+```
 
-Resolve whether to reuse a verified existing build or create a fresh build from the user's request and repository policy. When both remain valid, ask before changing version or build numbers or uploading a new artifact.
+`missing` means draft the note and pause for copy approval. `conflict` means repair or reapprove stale or malformed copy. Proceed only on `valid`. A first App Store version may be not applicable only when live ASC evidence proves no shipped predecessor. Record that evidence in the release plan. TestFlight lanes never require an App Store release-note archive, though they may use optional What to Test copy.
 
-## Route to ASC skills
+Routine releases change only `whatsNew`. If `promotionalText` is `suggest`, draft an optional conversion-focused suggestion and ask for copy approval before applying it. `preserve` leaves it untouched. Description, keywords, subtitle, name, screenshots, and other listing fields require an explicit metadata or ASO intent. When requested, load `asc-aso-audit` for recommendations and `asc-metadata-sync` for canonical validation and writes. What’s New is conversion copy, not a keyword-indexing surface, so never stuff keywords into it.
 
-Load only the skills needed for the resolved lane.
+## Build and execute
+
+For lanes that can change tracked state, read [repository.md](references/repository.md). State repository and upstream state, `sourceCommit`, app identity, profile, Xcode container, scheme, configuration, marketing version, build provenance, archive path and note status, destination, allowed effects, excluded effects, required checks, and planned readbacks.
+
+Load only the leaf skills needed for changing mechanics:
 
 | Need | Owning skill |
 | --- | --- |
-| Current ASC commands, flags, output, and auth behavior | `asc-cli-usage` |
+| ASC commands, flags, output, and authentication | `asc-cli-usage` |
 | App, build, version, group, tester, or submission IDs | `asc-id-resolver` |
-| Local versioning, build, archive, export, validation, or upload | `asc-xcode-build` |
+| Versioning, build, archive, export, validation, or upload | `asc-xcode-build` |
 | Build processing and lookup | `asc-build-lifecycle` |
-| TestFlight groups, notes, beta review, and distribution | `asc-testflight-orchestration` |
-| App Store staging, publishing, and submission | `asc-release-flow` |
+| TestFlight groups, beta review, notes, and distribution | `asc-testflight-orchestration` |
+| App Store staging and submission | `asc-release-flow` |
+| Canonical metadata validation and writes | `asc-metadata-sync` |
+| Listing and ASO review when explicitly requested | `asc-aso-audit` |
 | Readiness blockers, stuck review, cancellation, or retry | `asc-submission-health` |
 | Signing diagnosis or setup | `asc-signing-setup` |
-| Canonical metadata changes | `asc-metadata-sync` |
-| Release-note drafting | `asc-whats-new-writer` |
-| An explicitly requested or already canonical resumable workflow | `asc-workflow` |
+| An explicitly requested canonical resumable workflow | `asc-workflow` |
 
-Do not copy their command recipes into this skill. Do not use `asc-workflow` by default.
+Do not copy their command recipes here and do not use `asc-workflow` by default. Preserve this skill's narrower effect boundary when a leaf supports broader operations.
 
-Complete this routing before context creation, dependency installation, version changes, builds, or remote effects. If a required leaf skill is unavailable, stop. Do not invoke `asc install-skills`, a package manager, or another installer unless the user separately authorizes installation.
+Use exact IDs after resolution. Never rediscover an uploaded build through an unqualified latest query. After every remote write, read back the exact app, build, version, group, localization, or submission. A successful exit or dry run is not proof.
 
-## Execute and reconcile
+If a write times out or returns malformed output, mark the effect `remote-unknown` and inspect live state before retrying. Never repeat an upload while that version and build outcome remains unknown. Continue from observed state and report `partial` when remote and repository outcomes differ.
 
-Follow the owning skill's dry-run, validation, and confirmation rules. Preserve the effect boundary from this request when a leaf skill supports broader operations.
-
-Use exact IDs after resolution. Do not rediscover an uploaded build through an unqualified latest-build query.
-
-When the workflow changes tracked release state, generate and stage every canonical output before archive. Record the staged Git tree, archive and export that exact tree, then commit the complete allowed path set before upload. Record the pre-change commit as `sourceCommit` and the new clean commit as `releaseCommit`. Require the release commit's tree to equal the archived tree.
-
-After each remote effect, read back the exact app, build, version, group, or submission state. A successful command exit, dry run, or agent report is not completion proof.
-
-After the exact remote readback succeeds, fast-forward push only `releaseCommit` to the branch and upstream verified at the start. Fetch or query that exact remote ref and require it to equal `releaseCommit`. A rejected push never authorizes a merge, rebase, force-push, pull request, or another upload.
-
-If a command times out or returns malformed output, treat its effect as unknown. Inspect live state before retrying. Continue from observed state instead of restarting the lane. After an upload attempt, never upload the same version and build again while its remote outcome remains unknown.
-
-Return one outcome:
-
-- `completed` with `sourceCommit`, `releaseCommit`, exact remote IDs, remote readback, and verified upstream equality when tracked state changed;
-- `partial` with separate remote and repository outcomes, completed effects, unknown effects, current live state, and one safe next action;
-- `blocked` with the conflict or missing authority;
-- `configured` with the context path and remaining setup choices.
-
-Do not describe a partial release as successful. Do not widen the user's authority to repair an adjacent problem.
+Return `completed`, `partial`, `blocked`, or `configured`. Include exact versions, commits, remote IDs, readback, remaining uncertainty, and one safe next action. Never describe a partial release as successful or widen authority to repair an adjacent problem.
