@@ -1,19 +1,25 @@
 ---
-name: review-loop
-description: "Use Poteto to review and fix code changes repeatedly until no validated actionable findings remain and checks pass. Use when asked to run a review-and-fix loop or keep reviewing and fixing until clear. Review-only requests remain review-only."
+name: local-review-until-clean
+description: "Use Poteto to review and fix local code changes repeatedly until no validated actionable findings remain and checks pass. Use when asked to keep reviewing and fixing the current local snapshot until clean, including on a branch that already has a PR. Do not use to manage GitHub PR feedback, CI, or merge-ready state. Review-only requests remain review-only."
 ---
 
-# Review loop
+# Local review until clean
 
 Let Poteto drive the work through its own playbooks, using Interrogate for review. This skill adds only the outer repetition and stopping conditions. Do not introduce a separate review framework, ledger schema, reviewer roster, or PR-management workflow.
 
+Use this skill whenever the requested review surface is the local snapshot, even if its branch already has a PR. Route requests about the published PR head, GitHub feedback, CI, or merge-ready state to `pr-until-ready`.
+
 ## Start
+
+Require literal `$poteto-mode` as the first non-whitespace prompt token, followed by this skill invocation. If that activation is absent, stop and ask the user to rerun with both tokens. The namespaced skill reference below resolves the dependency; it does not activate Poteto hooks.
 
 Use the `pstack-for-codex:poteto-mode` skill to lead this task and the `pstack-for-codex:interrogate` skill for review. Load their full instructions and follow their referenced playbooks and applicable skills. Resolve their current paths from the skill catalog or installed-plugin metadata, not a hardcoded cache version. If a dependency is missing, report it rather than silently substituting another workflow.
 
-Apply Poteto directly for this task; do not depend on sticky activation. Let Poteto select the matching playbook, load its applicable skills, delegate, and verify. Use its delegate instructions so subagents explicitly read the skills their roles require. The user should not need to invoke each component or approve routine transitions between passes.
+Load and follow Poteto as a current-task dependency. Do not claim session activation or depend on sticky hooks. Let Poteto select the matching playbook, load its applicable skills, delegate, and verify. Use its delegate instructions so subagents explicitly read the skills their roles require. The user should not need to invoke each component or approve routine transitions between passes.
 
 ## Repeat
+
+For every Interrogate pass, include the committed branch diff against its base, the staged index, the unstaged working tree, and all in-scope untracked files. Resolve the base before review. The final independent review must cover that same complete snapshot.
 
 1. Have Poteto run Interrogate on the requested changes.
 2. Let Poteto apply Interrogate's lead judgment, validate findings, and distinguish actionable issues from suggestions, duplicates, and false positives.

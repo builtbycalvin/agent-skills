@@ -1,0 +1,8 @@
+interface:
+  display_name: "Local Review Until Clean"
+  short_description: "Review local changes until independently clean"
+  default_prompt: "$poteto-mode Use $local-review-until-clean to review and fix the current local changes until no validated actionable findings remain and required checks pass."
+policy:
+  products:
+    - CODEX
+  allow_implicit_invocation: false
