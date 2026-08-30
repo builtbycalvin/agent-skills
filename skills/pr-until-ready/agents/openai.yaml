@@ -1,0 +1,8 @@
+interface:
+  display_name: "PR Until Ready"
+  short_description: "Drive a PR until GitHub reports it ready"
+  default_prompt: "$poteto-mode Use $pr-until-ready to address review findings and CI on the current pull request until GitHub reports it merge-ready. Auto-merge only if I explicitly request it."
+policy:
+  products:
+    - CODEX
+  allow_implicit_invocation: false

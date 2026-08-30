@@ -1,4 +1,0 @@
-interface:
-  display_name: "Review Loop"
-  short_description: "Review, repair, and verify code until clear"
-  default_prompt: "Use $review-loop to review and fix the current changes until no validated actionable findings remain and required checks pass."
