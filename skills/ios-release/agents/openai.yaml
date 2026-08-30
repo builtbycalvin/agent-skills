@@ -1,0 +1,8 @@
+interface:
+  display_name: "iOS Release"
+  short_description: "Configure and run guided iOS releases"
+  default_prompt: "Use $ios-release to configure this project or release its app to the intended TestFlight or App Store destination."
+policy:
+  products:
+    - CODEX
+  allow_implicit_invocation: true
