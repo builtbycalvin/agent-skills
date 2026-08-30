@@ -81,16 +81,17 @@ review-only.
 To address pull-request feedback until merge-ready:
 
 ```text
-$poteto-mode $pr-until-ready address review findings and CI on the current pull request until it is merge-ready.
+$pr-until-ready address review findings and CI on the current pull request until it is merge-ready.
 ```
 
 To merge after the PR reaches ready state, say so explicitly:
 
 ```text
-$poteto-mode $pr-until-ready address review findings and CI, then auto-merge the current pull request if it is ready.
+$pr-until-ready address review findings and CI, then auto-merge the current pull request if it is ready.
 ```
 
-PR Until Ready stops at merge-ready unless you explicitly request merging.
+PR Until Ready triggers Poteto Mode and stops at merge-ready unless you
+explicitly request merging.
 
 ## Update
 
