@@ -54,70 +54,29 @@ must be reported.
 
 ## Install
 
-These commands are for fresh global installations. Before each command, inspect
-that command's target skill. If that name already exists or its state is
-uncertain, stop and preserve it. Do not approve a replacement prompt. Follow the
-Skills CLI documentation before an upgrade, replacement, or project-local
-installation.
-
-Install globally for Codex:
+Install all skills from this repository:
 
 ```bash
-npx skills@1.5.23 add builtbycalvin/agent-skills --skill local-review-until-clean --agent codex --global
-```
-
-Install PR Until Ready globally for Codex:
-
-```bash
-npx skills@1.5.23 add builtbycalvin/agent-skills --skill pr-until-ready --agent codex --global
-```
-
-The Skills CLI stores Codex skills in a shared universal-agent directory. Other
-compatible agents may discover the same global installation even with
-`--agent codex`; the flag scopes managed links but does not create private
-storage.
-
-Confirm that Codex discovers both global skills:
-
-```bash
-npx skills@1.5.23 list --global --agent codex --json
-```
-
-Require global records for both `local-review-until-clean` and `pr-until-ready`,
-each with `agents` containing `Codex`.
-
-`review-loop` was renamed to `local-review-until-clean`. Do not automate removal
-of the old installation. Its directory may be shared with other agents. Stop
-invoking the old name.
-
-To list available skills without installing:
-
-```bash
-npx skills@1.5.23 add builtbycalvin/agent-skills --list
+npx skills@latest add builtbycalvin/agent-skills -g
 ```
 
 ## Use
 
-In Codex, use both skills explicitly. `$poteto-mode` must be the first token:
+Review and fix local changes until clean:
 
 ```text
-$poteto-mode $local-review-until-clean review and fix the current changes until no actionable findings remain.
+$local-review-until-clean review and fix the current changes until no actionable findings remain.
 ```
 
 For review without changes:
 
 ```text
-$poteto-mode $local-review-until-clean review the current changes only. Do not edit files.
+$local-review-until-clean review the current changes only. Do not edit files.
 ```
 
-A review-only request stays review-only. Local Review Until Clean does not grant
-permission to commit, push, open or merge pull requests, deploy, or change
-production.
-
-Three passes are a progress checkpoint, not a mandatory count or hard cap.
-Local Review Until Clean stops unfinished after two consecutive passes without
-verified progress, repeated reversals, a genuine blocker, or a user-specified
-budget limit.
+Local Review Until Clean triggers Poteto Mode and Interrogate for the task. You
+do not need to invoke either dependency separately. A review-only request stays
+review-only.
 
 To address pull-request feedback until merge-ready:
 
@@ -125,30 +84,23 @@ To address pull-request feedback until merge-ready:
 $poteto-mode $pr-until-ready address review findings and CI on the current pull request until it is merge-ready.
 ```
 
-An explicit request to address pull-request feedback until merge-ready with PR
-Until Ready authorizes bounded repair commits, non-force pushes to the current
-pull-request branch, replies, and eligible automated-thread resolution. A
-check-only or review-only request remains read-only. The skill does not authorize
-force-pushing, deploying, or resolving human threads.
-
 To merge after the PR reaches ready state, say so explicitly:
 
 ```text
 $poteto-mode $pr-until-ready address review findings and CI, then auto-merge the current pull request if it is ready.
 ```
 
-The phrase `merge-ready` alone does not authorize merging. A question,
-hypothetical, quoted example, or documentation sentence does not authorize it
-either. An imperative to merge, auto-merge, land, or ship an exact PR or frozen
-stack hands the ready state to Poteto's Shipping playbook for independent
-verification.
+PR Until Ready stops at merge-ready unless you explicitly request merging.
 
 ## Update
 
-Preserve any local edits before updating. Use `npx skills@1.5.23 --help` and the
-[Skills CLI documentation](https://github.com/vercel-labs/skills#readme) for
-update and project-local options. Update pstack separately using its
-[maintenance instructions](https://github.com/Aqua-123/pstack-for-codex#update-or-remove).
+Update installed skills:
+
+```bash
+npx skills@latest update
+```
+
+Update pstack separately using its [maintenance instructions](https://github.com/Aqua-123/pstack-for-codex#update-or-remove).
 
 ## Attribution and license
 

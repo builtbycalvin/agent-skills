@@ -11,11 +11,11 @@ Use this skill whenever the requested review surface is the local snapshot, even
 
 ## Start
 
-Require literal `$poteto-mode` as the first non-whitespace prompt token, followed by this skill invocation. If that activation is absent, stop and ask the user to rerun with both tokens. The namespaced skill reference below resolves the dependency; it does not activate Poteto hooks.
+Invoking this skill triggers Poteto Mode for the current task. Treat this explicit wrapper invocation as satisfying Poteto's activation requirement: do not require the user to invoke `$poteto-mode` separately or place it first in the prompt.
 
 Use the `pstack-for-codex:poteto-mode` skill to lead this task and the `pstack-for-codex:interrogate` skill for review. Load their full instructions and follow their referenced playbooks and applicable skills. Resolve their current paths from the skill catalog or installed-plugin metadata, not a hardcoded cache version. If a dependency is missing, report it rather than silently substituting another workflow.
 
-Load and follow Poteto as a current-task dependency. Do not claim session activation or depend on sticky hooks. Let Poteto select the matching playbook, load its applicable skills, delegate, and verify. Use its delegate instructions so subagents explicitly read the skills their roles require. The user should not need to invoke each component or approve routine transitions between passes.
+Load and follow Poteto as a current-task dependency, including its complete activation-turn behavior except for its literal leading-token check, which this wrapper satisfies. This does not activate Poteto's session hooks, so do not claim session activation or depend on sticky behavior. Let Poteto select the matching playbook, load its applicable skills, delegate, and verify. Use its delegate instructions so subagents explicitly read the skills their roles require. The user should not need to invoke Poteto, Interrogate, each component, or approve routine transitions between passes.
 
 ## Repeat
 
