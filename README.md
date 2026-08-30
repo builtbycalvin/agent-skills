@@ -98,16 +98,18 @@ npx skills@1.5.23 add builtbycalvin/agent-skills --list
 
 ## Use
 
-In Codex, use both skills explicitly. `$poteto-mode` must be the first token:
+In Codex, invoke Local Review Until Clean directly. It loads Poteto and
+Interrogate as task-local dependencies; the user does not need to invoke them
+separately:
 
 ```text
-$poteto-mode $local-review-until-clean review and fix the current changes until no actionable findings remain.
+$local-review-until-clean review and fix the current changes until no actionable findings remain.
 ```
 
 For review without changes:
 
 ```text
-$poteto-mode $local-review-until-clean review the current changes only. Do not edit files.
+$local-review-until-clean review the current changes only. Do not edit files.
 ```
 
 A review-only request stays review-only. Local Review Until Clean does not grant
