@@ -87,6 +87,8 @@ convention, then an existing valid V2 location, then a deterministic
 `release-notes/ios/<app-key>` or `release-notes` fallback. If multiple valid
 candidates exist, migration returns `incomplete` with the candidates and makes
 no changes. It never invents a location from a date or an ignored/generated
-directory. A backup or partially completed migration is reconciled by comparing
+directory. A shared `release-notes` directory is ambiguous for a multi-app
+repository, so migration returns safe per-app candidates instead of assigning it
+to every app. A backup or partially completed migration is reconciled by comparing
 normalized content; conflicting generations are reported rather than
 overwritten.

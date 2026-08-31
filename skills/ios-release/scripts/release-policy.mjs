@@ -106,6 +106,11 @@ export function createReleasePolicyBoundary(repoCandidate) {
       if (checked.ok) safe.push(relative);
     }
     const candidates = [...new Set(safe)];
+    if (appCount > 1 && candidates.includes('release-notes')) {
+      const perApp = [...new Set([...candidates.filter((relative) => relative !== 'release-notes'), `release-notes/ios/${appKey}`, `release-notes/${appKey}`])]
+        .filter((relative) => validateConfigured(appKey, defaultPolicy(relative)).ok);
+      return { status: 'choice', candidates: perApp, errors: [`apps.${appKey}.releaseNotes.archiveDirectory: shared release-notes is ambiguous for multiple apps; choose one per-app candidate: ${perApp.join(', ')}`] };
+    }
     if (candidates.length > 1) return { status: 'choice', candidates, errors: [`apps.${appKey}.releaseNotes.archiveDirectory: choose one candidate: ${candidates.join(', ')}`] };
     const policy = defaultPolicy(candidates[0] ?? convention(appKey, appCount));
     const checked = validateConfigured(appKey, policy);

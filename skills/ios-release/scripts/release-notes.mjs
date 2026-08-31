@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +13,18 @@ const SOURCE_COMMIT = /^[0-9a-f]{40}$/i;
 function object(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
 function runGit(repo, args) { return execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
 function repoRoot(repo) { return path.resolve(runGit(path.resolve(repo), ['rev-parse', '--show-toplevel'])); }
+function inside(root, candidate) { const relative = path.relative(root, candidate); return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); }
+function safeConfigPath(repo, candidate) {
+  const configPath = path.resolve(repo, candidate);
+  const canonicalRepo = realpathSync.native(repo);
+  if (!inside(repo, configPath)) throw new Error('configuration path escapes the repository');
+  const info = lstatSync(configPath);
+  if (info.isSymbolicLink()) throw new Error('configuration path is symlinked');
+  if (!info.isFile()) throw new Error('configuration path is not a regular file');
+  if (!inside(canonicalRepo, realpathSync.native(configPath))) throw new Error('configuration path escapes the repository');
+  try { runGit(repo, ['check-ignore', '--quiet', '--no-index', '--', path.relative(repo, configPath)]); throw new Error('configuration path is ignored by Git'); } catch (error) { if (error.message === 'configuration path is ignored by Git') throw error; }
+  return configPath;
+}
 function section(markdown, title) { const heading = new RegExp(`^## ${title.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\s*$`, 'm'); const match = heading.exec(markdown); if (!match) return null; const start = match.index + match[0].length; const next = markdown.slice(start).search(/^## .+$/m); return markdown.slice(start, next < 0 ? undefined : start + next).trim(); }
 function localized(content, errors, label) { const result = {}; const headings = [...content.matchAll(/^### ([^\n]+)\s*$/gm)]; for (let index = 0; index < headings.length; index += 1) { const locale = headings[index][1].trim(); const start = headings[index].index + headings[index][0].length; const end = index + 1 < headings.length ? headings[index + 1].index : content.length; if (Object.hasOwn(result, locale)) errors.push(`${label}: duplicate locale heading ${locale}`); result[locale] = content.slice(start, end).trim(); } return result; }
 
@@ -53,8 +65,8 @@ function validateGitEvidence(repo, requestedSourceCommit, frontmatter, archiveRe
 }
 
 export function checkReleaseNote(input) {
-  const repo = repoRoot(input.repo); const configPath = path.resolve(repo, input.config ?? '.ios-release/config.json'); const reasons = []; const version = String(input.version ?? ''); const sourceCommit = String(input.sourceCommit ?? '');
-  let config; try { config = JSON.parse(input.configValue ?? readFileSync(configPath, 'utf8')); } catch (error) { return result('conflict', [{ code: 'invalid-config', detail: error.message }], { path: configPath }); }
+  const repo = repoRoot(input.repo); let configPath = path.resolve(repo, input.config ?? '.ios-release/config.json'); const reasons = []; const version = String(input.version ?? ''); const sourceCommit = String(input.sourceCommit ?? '');
+  let config; try { if (input.configValue === undefined) configPath = safeConfigPath(repo, input.config ?? '.ios-release/config.json'); config = JSON.parse(input.configValue ?? readFileSync(configPath, 'utf8')); } catch (error) { return result('conflict', [{ code: 'invalid-config', detail: error.message }], { path: configPath }); }
   const app = config?.apps?.[input.app]; if (!object(app)) return result('conflict', [{ code: 'unknown-app', detail: String(input.app) }], { path: configPath }); const policy = app.releaseNotes;
   const target = createReleasePolicyBoundary(repo).resolveNote(input.app, policy, version); if (!target.ok) return result('conflict', target.reasons, { path: null }); const { archivePath, archiveRelative } = target.value;
   let markdown; try { markdown = readFileSync(archivePath, 'utf8'); } catch (error) { if (error.code === 'ENOENT') return result('missing', [{ code: 'missing-archive', detail: archiveRelative }], { path: archivePath }); return result('conflict', [{ code: 'archive-unreadable', detail: error.message }], { path: archivePath }); }
