@@ -31,13 +31,33 @@ Merge authority covers Shipping's required independent-verdict posts only on the
 
 Run Babysit until its declared terminal result. Let Babysit own the watcher, merge frontier, blocker order, review triage, repair waves, checks, and stopping conditions. If Babysit surfaces another review generation before it stops, continue through the same playbook.
 
-Wait only while GitHub reports pending checks or review automation. Do not post `@codex review`, request another reviewer pass, add a quiet-period timer, or wait for generic reviewer silence. If GitHub reports the PR ready before another comment appears, stop. A later comment starts a new invocation.
+Run the watcher with `--require-codex-review`. In `drive` and `background` modes, also pass `--timeout 900`. Accept `CLEAN` only from the watcher's exact-head connector proof. That proof requires a `Completed` summary for the current head and the pull request's `THUMBS_UP` reaction from `chatgpt-codex-connector[bot]` at or after that completion, with the summary strictly after any current-head findings. Resolved threads do not turn connector findings into `CLEAN`; require a later clean connector result.
+
+Let the watcher own reaction propagation and its timeout. A finding-free `Completed` summary without the qualifying thumbs-up gets one normal watcher interval, then `TIMEOUT`. Missing or stale exact-head connector evidence remains pending until the 15-minute watcher deadline. Do not infer `CLEAN` from reviewer silence, an empty unresolved-thread list, `reviewDecision`, or GitHub's merge state. Do not add another poller or timer around the watcher.
+
+Wait only while the watcher reports pending checks, review automation, or required connector evidence. Do not post `@codex review`, request another reviewer pass, add a quiet-period timer, or wait for generic reviewer silence. If the watcher reports the PR ready before another comment appears, stop. A later comment starts a new invocation.
 
 Keep the original PR intent and preserve unrelated work. Do not churn code to satisfy a bot. Human-thread resolution requires separate explicit authorization.
 
+## Apple verification
+
+Classify the actual PR diff, not the repository's language inventory. Do not run iOS tests merely because Swift exists elsewhere. When the repository has an Apple target or the PR paths may be Apple build inputs, read and follow [the shared Apple local verification contract](references/apple-local-verification.md). Docs-only and non-Apple-service-only PRs are excluded. Mixed changes are not.
+
+GitHub or Linux CI is not sufficient Apple proof when no macOS job covers the same content and applicable checks. When equivalent macOS CI covers the same content and applicable checks, record that CI evidence under the required-check outcome contract. Otherwise, before reporting an Apple-build-affecting PR merge-ready, require a valid local receipt whose `head_oid`, `head_tree`, and `content_tree` match the exact current PR head and whose final checks satisfy the affected target. Reuse a valid receipt for unchanged content. Treat absent, incomplete, or stale evidence as missing and run the applicable local verification. Route a failed receipt through `route_verification`: `check-only` blocks; `repair-authorized` diagnoses the failure and repairs only after the cause is validated in scope.
+
+Run final local verification only after the repair wave is complete, pushed when the selected mode authorizes it, and the PR head is stable. Do not rerun it on polling iterations or merely because a review comment arrived. Any repair wave that changes Apple-build-affecting content invalidates old evidence. A commit-only change that preserves the same content tree does not, but the receipt must still identify the current PR head before readiness is reported.
+
+This workflow owns changed-surface classification, target selection, and the ordered required-check names and commands. Map Babysit's `check` mode to `check-only`; map `drive` and `background` to `repair-authorized`; `threads-only` does not perform merge-readiness verification. Call `route_verification(authority, receipt_state)` only after that mapping. Do not pass Babysit modes, changed roles, or target kinds to the helper.
+
+`check` mode may classify the change and run read-only local tests. It may not repair, commit, push, reply, or resolve a thread. In a repair-authorized continuing mode, diagnose required-check failures and fix only validated in-scope causes under Babysit's existing write rules. Run focused checks during the repair, then stabilize and rerun every applicable final check. Never delete, skip, or weaken tests to get green. Report pre-existing, flaky, environment, and no-progress failures as blockers under Babysit's rules.
+
+## Verification outcomes
+
+Classify every candidate final check under [the shared required-check outcome contract](references/verification-outcomes.md). Follow its recovery rule for each blocked check. Do not report the PR as merge-ready while any required check is `BLOCKED`.
+
 ## Ready or ship
 
-Stop when Babysit reports the PR or frontier merge-ready unless the user explicitly authorized merging. For an authorized merge, hand the exact PR or frozen stack to Poteto's Shipping playbook and follow it in full. Shipping must independently re-verify the current state before it arms or merges anything. Do not merge from Babysit.
+Stop when Babysit reports the PR or frontier merge-ready, every applicable required check is `PASS`, and the Apple evidence is either equivalent macOS CI or a local receipt that matches the exact current head and tree, unless the user explicitly authorized merging. For an authorized merge, hand the exact PR or frozen stack to Poteto's Shipping playbook and follow it in full. Shipping must independently re-verify the current state before it arms or merges anything. Do not merge from Babysit.
 
 ## Stop unfinished
 
@@ -45,4 +65,4 @@ Stop unfinished whenever Babysit or Shipping reaches one of its declared blocker
 
 The skill never authorizes force-push, deployment, Production changes, issue creation, or unrelated edits. Without explicit merge authority, it never authorizes merge or merge-when-ready.
 
-Use Poteto's Babysit report when the task stops at readiness. Include the mode, PR and exact head, fixes and dismissals, checks, remaining blockers, and whether GitHub reports the PR merge-ready. After an authorized Shipping handoff, use Shipping's report.
+Use Poteto's Babysit report when the task stops at readiness. Include the mode, PR and exact head and tree, fixes and dismissals, each check's outcome and evidence, the Apple receipt or non-Apple classification, remaining `BLOCKED_<KIND>` states, and whether GitHub reports the PR merge-ready. After an authorized Shipping handoff, use Shipping's report.

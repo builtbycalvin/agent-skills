@@ -23,17 +23,37 @@ For every Interrogate pass, include the committed branch diff against its base, 
 
 1. Have Poteto run Interrogate on the requested changes.
 2. Let Poteto apply Interrogate's lead judgment, validate findings, and distinguish actionable issues from suggestions, duplicates, and false positives.
-3. If actionable findings remain, have Poteto fix them through the appropriate playbook and run the relevant checks.
+3. If actionable findings remain, have Poteto fix them through the appropriate playbook and run focused checks relevant to each repair.
 4. Have Poteto obtain an independent re-review of the resulting changes. Repeat while validated actionable findings remain.
 
 Interrogate itself stays review-only. Poteto owns fixes and the decision to continue. Keep the original scope and preserve unrelated work. Do not reopen dismissed findings without new evidence or chase stylistic preferences to manufacture another pass.
 
+## Review runtime outcomes
+
+A review pass completes only when the delegated reviewer returns a terminal result for the requested snapshot. Treat `failed`, `systemError`, `canceled`, `interrupted`, or a missing result as `BLOCKED_REVIEW_RUNTIME`. Treat a usage, credit, or quota error as `BLOCKED_REVIEW_CAPACITY`. Do not count a blocked attempt as a pass, infer clean from silence, or start another review task after a capacity blocker.
+
+Wait through the supported agent status surface. If the reviewer produces no observable progress for 15 minutes, refresh its status once. If the status remains unchanged, request cancellation once, classify the pass as `BLOCKED_REVIEW_RUNTIME`, and stop the loop. A transient interruption may use the one bounded retry allowed by Poteto's runtime contract. Do not retry a capacity failure.
+
+## Apple verification
+
+Classify the actual in-scope changed surface before selecting final checks. Do not run Apple tests merely because the repository contains Swift files. When the repository has an Apple target or the changed paths may be Apple build inputs, read and follow [the shared Apple local verification contract](references/apple-local-verification.md). It defines the build-affecting surface, command selection, content-tree identity, receipt, isolation, reuse, and failure rules.
+
+After the complete final snapshot has no unresolved actionable findings, stabilize it and run every applicable final check. An Xcode iOS app requires its applicable `xcodebuild` and XCTest checks. Use `swift test` only for a genuinely affected Swift Package with `Package.swift`. Repository-documented verification commands take precedence when they cover the affected target.
+
+This workflow owns changed-surface classification, target selection, and the ordered required-check names and commands. Map review-only mode to `check-only`; map repair-authorized mode to `repair-authorized`; then call `route_verification(authority, receipt_state)`. Do not pass changed roles, target kinds, or workflow mode to the helper.
+
+A bounded read-only verification subagent may run these final checks after the snapshot is stable. It must not edit code and must report the contract's exact commands, results, artifacts, toolchain identity, times, and `tree_before` and `tree_after` for every check. Use isolated build and test state where practical. If delegation is unavailable, the lead runs equivalent verification.
+
+## Verification outcomes
+
+Classify every candidate final check under [the shared required-check outcome contract](references/verification-outcomes.md). Follow its recovery rule for each blocked check. Do not collapse a clean review and blocked verification into one successful verdict.
+
 ## Stop
 
-Finish when an independent review of the complete final in-scope changes has no unresolved actionable findings and required checks pass on that final code. Reuse a completed review if it already covers that unchanged final code; do not require extra clean rounds. Reviewer silence alone is insufficient, and missing required verification or an unresolved potentially blocking concern is not success.
+Finish when an independent review of the complete final in-scope changes has no unresolved actionable findings and every applicable required check is `PASS` on that exact content tree. Reuse a completed review or valid verification receipt only when it covers the unchanged final tree. A later commit with the same tree does not invalidate content-bound evidence. Any content change does. Reviewer silence alone is insufficient. A `BLOCKED` check or missing required verification is not success.
 
 Three passes are an automatic progress checkpoint, not a minimum or hard cap. Continue beyond three while making verified progress. Stop and report unfinished work after two consecutive passes without verified progress, repeated reversals, a genuine blocker, or a user-specified budget limit. Do not silently expand scope or lower the completion bar to make the loop end.
 
 Follow the user's actual authority. Questions and review-only requests do not authorize repairs. This loop does not authorize commits, pushes, PR actions, merges, deployment, Production changes, or scheduled automation without a separate explicit request.
 
-Use Poteto's normal report. Include how many passes ran, what was fixed, verification results, and any remaining findings or blocker.
+Use Poteto's normal report. Include how many completed passes ran, what was fixed, the final content tree, each check's outcome and evidence, the verification receipt or non-Apple classification, and any remaining finding or `BLOCKED_<KIND>` state. Report a blocked review attempt separately from completed passes.
