@@ -1,0 +1,12 @@
+[
+  {"name": "absent_runs_final", "authority": "check-only", "receipt": "absent", "expected": {"action": "run-final-verification"}},
+  {"name": "incomplete_runs_final", "authority": "repair-authorized", "receipt": "incomplete", "expected": {"action": "run-final-verification"}},
+  {"name": "stale_runs_final", "authority": "check-only", "receipt": "stale-content-tree", "expected": {"action": "run-final-verification"}},
+  {"name": "valid_reuses", "authority": "check-only", "receipt": "valid-current-tree", "expected": {"action": "reuse-receipt"}},
+  {"name": "snapshot_change_stabilizes", "authority": "repair-authorized", "receipt": "snapshot-changed-during-run", "expected": {"action": "stabilize-and-rerun"}},
+  {"name": "check_only_failed_blocks", "authority": "check-only", "receipt": "failed", "expected": {"action": "block-no-repair"}},
+  {"name": "repair_failed_diagnoses", "authority": "repair-authorized", "receipt": "failed", "expected": {"action": "diagnose-failure"}},
+  {"name": "check_only_validated_failure_blocks", "authority": "check-only", "receipt": "failed-validated-in-scope", "expected": {"action": "block-no-repair"}},
+  {"name": "repair_validated_failure_repairs", "authority": "repair-authorized", "receipt": "failed-validated-in-scope", "expected": {"action": "repair-focused-then-final"}},
+  {"name": "apple_repair_invalidates_old_receipt", "authority": "repair-authorized", "receipt": "valid-before-apple-repair", "expected": {"action": "invalidate-and-run-after-stable"}}
+]

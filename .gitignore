@@ -5,3 +5,6 @@
 *.pem
 *.key
 node_modules/
+__pycache__/
+/.agents/
+/skills-lock.json
