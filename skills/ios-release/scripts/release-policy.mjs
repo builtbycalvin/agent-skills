@@ -13,6 +13,7 @@ function nonEmpty(value) { return typeof value === 'string' && value.trim().leng
 function runGit(repo, args) { return execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
 function repoRoot(candidate) { return path.resolve(runGit(path.resolve(candidate), ['rev-parse', '--show-toplevel'])); }
 function inside(root, candidate) { const relative = path.relative(root, candidate); return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); }
+function gitMetadataDirectories(repo) { return [...new Set(['--git-dir', '--git-common-dir'].map((flag) => realpathSync.native(path.resolve(repo, runGit(repo, ['rev-parse', flag])))))]; }
 function ignored(repo, relative) { try { runGit(repo, ['check-ignore', '--quiet', '--no-index', '--', relative]); return true; } catch { return false; } }
 function tracked(repo, relative) { return runGit(repo, ['ls-files', '--', relative]).length > 0; }
 function gitlink(repo, relative) { try { return runGit(repo, ['ls-files', '--stage', '--', relative]).split('\n').some((line) => line.startsWith('160000 ')); } catch { return false; } }
@@ -43,13 +44,15 @@ function parsePolicy(appKey, rawPolicy) {
   return { ok: true, value: { ...rawPolicy, locales: [...rawPolicy.locales] }, errors: [], missing: [] };
 }
 
-function resolveRepositoryPath(repo, value, location, allowTracked = false, directoryCandidate = false) {
+function resolveRepositoryPath(repo, metadataDirectories, value, location, allowTracked = false, directoryCandidate = false) {
   const errors = [];
   if (!nonEmpty(value)) return { ok: false, errors: [`${location}: expected a non-empty relative path`] };
   if (path.isAbsolute(value) || path.win32.isAbsolute(value)) return { ok: false, errors: [`${location}: absolute paths are forbidden`] };
   const absolute = path.resolve(repo, value);
   if (!inside(repo, absolute)) return { ok: false, errors: [`${location}: path escapes the repository`] };
   const relative = path.relative(repo, absolute);
+  const canonicalCandidate = path.resolve(realpathSync.native(repo), relative);
+  if (metadataDirectories.some((metadata) => inside(metadata, canonicalCandidate))) errors.push(`${location}: path is inside Git metadata`);
   const parts = relative.split(path.sep).filter(Boolean);
   if (parts.some((part) => FORBIDDEN.has(part.normalize('NFC').toLocaleLowerCase('en-US')))) errors.push(`${location}: unsafe generated, local, or credential location`);
   for (let index = 1; index <= parts.length; index += 1) if (gitlink(repo, parts.slice(0, index).join(path.sep))) { errors.push(`${location}: path is inside a Git submodule`); break; }
@@ -81,10 +84,11 @@ function convention(appKey, appCount) { return appCount > 1 ? `release-notes/ios
 
 export function createReleasePolicyBoundary(repoCandidate) {
   const repo = repoRoot(repoCandidate);
+  const metadataDirectories = gitMetadataDirectories(repo);
   function validateConfigured(appKey, rawPolicy) {
     const parsed = parsePolicy(appKey, rawPolicy);
     if (!parsed.ok) return parsed;
-    const archive = resolveRepositoryPath(repo, parsed.value.archiveDirectory, `apps.${appKey}.releaseNotes.archiveDirectory`, false, true);
+    const archive = resolveRepositoryPath(repo, metadataDirectories, parsed.value.archiveDirectory, `apps.${appKey}.releaseNotes.archiveDirectory`, false, true);
     if (!archive.ok) return { ok: false, errors: archive.errors, missing: [] };
     try {
       if (!lstatSync(archive.value.absolute).isDirectory()) return { ok: false, errors: [`apps.${appKey}.releaseNotes.archiveDirectory: existing path is not a directory`], missing: [] };
@@ -126,7 +130,7 @@ export function createReleasePolicyBoundary(repoCandidate) {
     if (!nonEmpty(marketingVersion) || marketingVersion !== path.basename(marketingVersion) || marketingVersion !== path.win32.basename(marketingVersion) || marketingVersion === '.' || marketingVersion === '..') {
       return { ok: false, reasons: [{ code: 'invalid-marketing-version', detail: 'version must be one path segment' }] };
     }
-    const note = resolveRepositoryPath(repo, path.join(checked.value.archive.relative, `${marketingVersion}.md`), 'releaseNotes.archivePath', true);
+    const note = resolveRepositoryPath(repo, metadataDirectories, path.join(checked.value.archive.relative, `${marketingVersion}.md`), 'releaseNotes.archivePath', true);
     if (!note.ok) return { ok: false, reasons: [{ code: 'archive-outside-repository', detail: note.errors.join('; ') }] };
     return { ok: true, value: { archivePath: note.value.absolute, archiveRelative: note.value.relative, locales: checked.value.policy.locales, sourceLocale: checked.value.policy.sourceLocale, promotionalText: checked.value.policy.promotionalText } };
   }

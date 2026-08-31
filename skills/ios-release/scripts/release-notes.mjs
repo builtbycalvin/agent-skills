@@ -32,7 +32,7 @@ function safeConfigPath(repo, candidate) {
   return configPath;
 }
 function section(markdown, title) { const heading = new RegExp(`^## ${title.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\s*$`, 'm'); const match = heading.exec(markdown); if (!match) return null; const start = match.index + match[0].length; const next = markdown.slice(start).search(/^## .+$/m); return markdown.slice(start, next < 0 ? undefined : start + next).trim(); }
-function localized(content, errors, label) { const result = {}; const headings = [...content.matchAll(/^### ([^\n]+)\s*$/gm)]; for (let index = 0; index < headings.length; index += 1) { const locale = headings[index][1].trim(); const start = headings[index].index + headings[index][0].length; const end = index + 1 < headings.length ? headings[index + 1].index : content.length; if (Object.hasOwn(result, locale)) errors.push(`${label}: duplicate locale heading ${locale}`); result[locale] = content.slice(start, end).trim(); } return result; }
+function localized(content, errors, label) { const result = {}; const headings = [...content.matchAll(/^### ([^\n]+)\s*$/gm)]; const prefixEnd = headings[0]?.index ?? content.length; if (content.slice(0, prefixEnd).trim()) errors.push(`${label}: content before first locale heading`); for (let index = 0; index < headings.length; index += 1) { const locale = headings[index][1].trim(); const start = headings[index].index + headings[index][0].length; const end = index + 1 < headings.length ? headings[index + 1].index : content.length; if (Object.hasOwn(result, locale)) errors.push(`${label}: duplicate locale heading ${locale}`); result[locale] = content.slice(start, end).trim(); } return result; }
 
 export function parseReleaseNote(markdown, source = '<string>') {
   const lines = String(markdown).split(/\r?\n/); const errors = []; let frontmatter = null; let frontmatterParsed = false; let body = String(markdown);
@@ -48,7 +48,7 @@ function result(status, reasons, extra = {}) { return { status, state: status, v
 function resolveCommit(repo, revision) { try { return runGit(repo, ['rev-parse', '--verify', '--end-of-options', `${revision}^{commit}`]); } catch { return null; } }
 function isAncestor(repo, base, head) { try { runGit(repo, ['merge-base', '--is-ancestor', base, head]); return true; } catch { return false; } }
 function isDirectChild(repo, parent, child) { try { const [commit, ...parents] = runGit(repo, ['rev-list', '--parents', '-n', '1', child]).split(' '); return commit === child && parents.length === 1 && parents[0] === parent; } catch { return false; } }
-function committedFileMatches(repo, commit, relative, content) { try { return execFileSync('git', ['-C', repo, 'show', `${commit}:${relative}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) === content; } catch { return false; } }
+function committedFileMatches(repo, commit, relative, content) { try { const committedBlob = runGit(repo, ['rev-parse', '--verify', '--end-of-options', `${commit}:${relative}`]); const worktreeBlob = execFileSync('git', ['-C', repo, 'hash-object', `--path=${relative}`, '--stdin'], { input: content, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim(); return committedBlob === worktreeBlob; } catch { return false; } }
 function validateGitEvidence(repo, requestedSourceCommit, frontmatter, archiveRelative, markdown, reasons) {
   const recorded = String(frontmatter.sourceCommit ?? '');
   if (!SOURCE_COMMIT.test(requestedSourceCommit) || !SOURCE_COMMIT.test(recorded)) { addReason(reasons, 'full-source-commit-required'); return; }
