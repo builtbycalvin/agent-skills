@@ -26,6 +26,7 @@ export function parseReleaseNote(markdown, source = '<string>') {
 function addReason(reasons, code, detail) { reasons.push({ code, ...(detail ? { detail } : {}) }); }
 function result(status, reasons, extra = {}) { return { status, state: status, valid: status === 'valid', reasons, errors: reasons.map((reason) => reason.detail ? `${reason.code}: ${reason.detail}` : reason.code), ...extra }; }
 function resolveCommit(repo, revision) { try { return runGit(repo, ['rev-parse', '--verify', '--end-of-options', `${revision}^{commit}`]); } catch { return null; } }
+function isAncestor(repo, base, head) { try { runGit(repo, ['merge-base', '--is-ancestor', base, head]); return true; } catch { return false; } }
 function validateGitEvidence(repo, requestedSourceCommit, frontmatter, reasons) {
   const recorded = String(frontmatter.sourceCommit ?? '');
   if (recorded !== requestedSourceCommit) addReason(reasons, 'wrong-source-commit', `${recorded || '<missing>'} != ${requestedSourceCommit}`);
@@ -37,7 +38,11 @@ function validateGitEvidence(repo, requestedSourceCommit, frontmatter, reasons) 
   const base = resolveCommit(repo, range[0]);
   const head = resolveCommit(repo, range[1]);
   if (!base || !head) addReason(reasons, 'source-range-unresolved', frontmatter.sourceRange);
-  else if (source && head !== source) addReason(reasons, 'source-range-does-not-end-at-commit', `${head} != ${source}`);
+  else if (source) {
+    if (head !== source) addReason(reasons, 'source-range-does-not-end-at-commit', `${head} != ${source}`);
+    if (base === source) addReason(reasons, 'source-range-base-not-distinct', base);
+    else if (!isAncestor(repo, base, source)) addReason(reasons, 'source-range-base-not-ancestor', `${base} is not an ancestor of ${source}`);
+  }
 }
 
 export function checkReleaseNote(input) {

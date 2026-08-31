@@ -64,6 +64,8 @@ Show the current shipped version, repository version, evidence category, and rec
 
 Read [release-notes.md](references/release-notes.md). This skill owns the normalized release-note process. Do not require `ios-whats-new` or `asc-whats-new-writer`.
 
+Before creating a tracked note, read [repository.md](references/repository.md) and complete its clean synchronization gate. Record `sourceCommit` while the worktree is clean. Draft and approve the copy without writing tracked files, then store the approved note in the archive.
+
 Determine the source range from the newest successfully shipped App Store version and its matching repository tag when live evidence can prove it. Do not use the newest uploaded or unshipped version as the baseline. If the shipped tag cannot be proved, present the proposed range and uncertainty before drafting.
 
 Inspect user-provided bullets, canonical changelog or release artifacts, and user-visible changes in the source range. Exclude internal refactors, developer tooling, unshipped flags, speculation, and unsupported claims. Draft the source locale first, lead with the strongest user benefit, use concise scannable language, localize naturally, and enforce the 4,000-character App Store limit.

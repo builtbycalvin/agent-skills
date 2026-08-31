@@ -27,7 +27,7 @@ const TRANSIENT_KEYS = new Set(['currentVersion', 'lastVerifiedAt', 'readiness',
 const PRIVATE_KEY = /-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----|-----BEGIN OPENSSH PRIVATE KEY-----/;
 const CREDENTIAL_PATH = /(?:\.(?:p8|pem|key)|(?:^|[\\/])credentials?(?:[\\/]|$))/i;
 const APP_KEY = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-const GROUP_ID = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
+const GROUP_ID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const IGNORE_CONTENT = '*\n!.gitignore\n!config.json\n';
 
 function object(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
@@ -62,7 +62,7 @@ function validateGroup(group, location, errors, ids) {
 }
 function validateApp(repo, policies, key, app, errors, missing) {
   const location = `apps.${key}`;
-  if (!object(app)) { errors.push(`${location}: expected an object`); return; }
+  if (!object(app)) { errors.push(`${location}: expected an object`); return null; }
   unknown(app, APP_FIELDS, location, errors);
   optionalString(app.displayName, `${location}.displayName`, errors);
   if (app.aliases !== undefined) { if (!Array.isArray(app.aliases)) errors.push(`${location}.aliases: expected an array`); else { const seen = new Set(); app.aliases.forEach((alias, index) => { optionalString(alias, `${location}.aliases[${index}]`, errors); if (seen.has(alias?.toLocaleLowerCase('en-US'))) errors.push(`${location}.aliases: duplicate alias`); seen.add(alias?.toLocaleLowerCase('en-US')); }); } }
@@ -74,6 +74,7 @@ function validateApp(repo, policies, key, app, errors, missing) {
   if (app.metadataDirectory !== undefined) relativePath(repo, app.metadataDirectory, `${location}.metadataDirectory`, errors, { rejectLocal: true });
   const releaseNotes = policies.validateConfigured(key, app.releaseNotes); errors.push(...releaseNotes.errors); missing.push(...releaseNotes.missing);
   if (app.defaultIntent !== undefined && !INTENTS.has(app.defaultIntent)) errors.push(`${location}.defaultIntent: invalid intent`);
+  return releaseNotes.ok ? releaseNotes.value : null;
 }
 function selectorClaims(apps, errors) {
   const claims = new Map(); const add = (selector, key, kind, location) => { if (!nonEmpty(selector)) return; const normalized = selector.toLocaleLowerCase('en-US'); if (claims.has(normalized)) errors.push(`${location}: selector ${JSON.stringify(selector)} collides with ${claims.get(normalized).kind}`); else claims.set(normalized, { key, kind }); };
@@ -85,7 +86,7 @@ function ignored(repo, target) { try { runGit(repo, ['check-ignore', '--quiet', 
 function whitelistValid(repo, errors) { const file = path.join(repo, WHITELIST); return readFile(file, 'utf8').then((content) => { if (content !== IGNORE_CONTENT) errors.push(`${WHITELIST}: expected strict whitelist (*, !.gitignore, !config.json)`); }).catch((error) => { if (error.code === 'ENOENT') errors.push(`${WHITELIST}: missing strict whitelist`); else throw error; }); }
 function missingLocalBindings(portableApps, localApps) { if (!object(portableApps) || !object(localApps)) return []; return Object.keys(portableApps).filter((key) => !object(localApps[key]) || !nonEmpty(localApps[key].ascProfile)).map((key) => `${LOCAL}.apps.${key}.ascProfile`); }
 
-export function parsePortableConfig(value, repo) { const errors = []; const missing = []; if (!object(value)) return { value: null, errors: ['$: expected an object'], missing }; const policies = createReleasePolicyBoundary(repo); unknown(value, ROOT_FIELDS, '$', errors); if (value.schemaVersion !== 2) errors.push('$.schemaVersion: expected 2'); if (!object(value.apps)) errors.push('$.apps: expected an object'); else { const keys = Object.keys(value.apps); if (value.defaultApp !== undefined && (!nonEmpty(value.defaultApp) || !Object.hasOwn(value.apps, value.defaultApp))) errors.push('$.defaultApp: unknown app'); const claims = selectorClaims(value.apps, errors); for (const key of keys) { if (!APP_KEY.test(key)) errors.push(`apps.${key}: invalid app key`); validateApp(repo, policies, key, value.apps[key], errors, missing); } if (keys.length > 1 && value.defaultApp === undefined) missing.push('defaultApp'); }
+export function parsePortableConfig(value, repo) { const errors = []; const missing = []; if (!object(value)) return { value: null, errors: ['$: expected an object'], missing }; const policies = createReleasePolicyBoundary(repo); unknown(value, ROOT_FIELDS, '$', errors); if (value.schemaVersion !== 2) errors.push('$.schemaVersion: expected 2'); if (!object(value.apps)) errors.push('$.apps: expected an object'); else { const keys = Object.keys(value.apps); if (value.defaultApp !== undefined && (!nonEmpty(value.defaultApp) || !Object.hasOwn(value.apps, value.defaultApp))) errors.push('$.defaultApp: unknown app'); const claims = selectorClaims(value.apps, errors); const archives = new Map(); for (const key of keys) { if (!APP_KEY.test(key)) errors.push(`apps.${key}: invalid app key`); const releaseNotes = validateApp(repo, policies, key, value.apps[key], errors, missing); if (releaseNotes) { const previous = archives.get(releaseNotes.archive.absolute); if (previous) errors.push(`apps.${key}.releaseNotes.archiveDirectory: collides with apps.${previous}.releaseNotes.archiveDirectory`); else archives.set(releaseNotes.archive.absolute, key); } } if (keys.length > 1 && value.defaultApp === undefined) missing.push('defaultApp'); }
   if (object(value.apps) && Object.keys(value.apps).length === 0) missing.push('apps'); inspectSecrets(value, '$', errors); return { value, errors, missing };
 }
 export function parseLocalConfig(value) { const errors = []; if (!object(value)) return { value: null, errors: ['$: expected an object'] }; unknown(value, LOCAL_ROOT_FIELDS, '$', errors); if (value.schemaVersion !== 2) errors.push('$.schemaVersion: expected 2'); if (!object(value.apps)) errors.push('$.apps: expected an object'); else for (const [key, binding] of Object.entries(value.apps)) { if (!APP_KEY.test(key)) errors.push(`apps.${key}: invalid app key`); if (!object(binding)) errors.push(`apps.${key}: expected an object`); else { unknown(binding, LOCAL_APP_FIELDS, `apps.${key}`, errors); if (!nonEmpty(binding.ascProfile)) errors.push(`apps.${key}.ascProfile: expected a non-empty string`); } } inspectSecrets(value, '$', errors); return { value, errors }; }

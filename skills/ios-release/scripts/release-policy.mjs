@@ -4,7 +4,7 @@ import path from 'node:path';
 
 const DIRECTORY = '.ios-release';
 const FORBIDDEN = new Set(['.git', '.asc', DIRECTORY, 'credentials', 'DerivedData', 'build', 'dist']);
-const LOCALE = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})+$/;
+const LOCALE = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const PROMOTIONAL_TEXT = new Set(['preserve', 'suggest']);
 const RELEASE_FIELDS = new Set(['archiveDirectory', 'sourceLocale', 'locales', 'tagPrefix', 'tone', 'promotionalText']);
 
@@ -78,6 +78,11 @@ export function createReleasePolicyBoundary(repoCandidate) {
     if (!parsed.ok) return parsed;
     const archive = resolveRepositoryPath(repo, parsed.value.archiveDirectory, `apps.${appKey}.releaseNotes.archiveDirectory`);
     if (!archive.ok) return { ok: false, errors: archive.errors, missing: [] };
+    try {
+      if (!lstatSync(archive.value.absolute).isDirectory()) return { ok: false, errors: [`apps.${appKey}.releaseNotes.archiveDirectory: existing path is not a directory`], missing: [] };
+    } catch (error) {
+      if (error.code !== 'ENOENT') return { ok: false, errors: [`apps.${appKey}.releaseNotes.archiveDirectory: path is not inspectable: ${error.message}`], missing: [] };
+    }
     return { ok: true, value: { policy: parsed.value, archive: archive.value }, errors: [], missing: [] };
   }
   function planMigration(appKey, appCount, rawPolicy) {
@@ -104,6 +109,9 @@ export function createReleasePolicyBoundary(repoCandidate) {
     if (!checked.ok) {
       const localeError = checked.errors.some((error) => error.includes('.locales') || error.includes('.sourceLocale'));
       return { ok: false, reasons: [{ code: localeError ? 'invalid-locale-policy' : 'invalid-archive-policy', detail: checked.errors.join('; ') }] };
+    }
+    if (!nonEmpty(marketingVersion) || marketingVersion !== path.basename(marketingVersion) || marketingVersion !== path.win32.basename(marketingVersion) || marketingVersion === '.' || marketingVersion === '..') {
+      return { ok: false, reasons: [{ code: 'invalid-marketing-version', detail: 'version must be one path segment' }] };
     }
     const note = resolveRepositoryPath(repo, path.join(checked.value.archive.relative, `${marketingVersion}.md`), 'releaseNotes.archivePath', true);
     if (!note.ok) return { ok: false, reasons: [{ code: 'archive-outside-repository', detail: note.errors.join('; ') }] };

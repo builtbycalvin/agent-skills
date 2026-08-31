@@ -15,6 +15,8 @@ A fresh release that changes tracked state requires all of these facts:
 
 Record that commit as `sourceCommit`. Stop before version changes or remote effects when the branch is ahead, behind, or diverged.
 
+Complete this gate before writing a tracked release-note archive. Draft and approve the note without changing tracked files, then write it after `sourceCommit` is recorded.
+
 Do not pull, merge, rebase, switch branches, or discard changes to satisfy this gate.
 
 ## Bind the archive to one release commit
