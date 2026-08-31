@@ -31,7 +31,11 @@ Merge authority covers Shipping's required independent-verdict posts only on the
 
 Run Babysit until its declared terminal result. Let Babysit own the watcher, merge frontier, blocker order, review triage, repair waves, checks, and stopping conditions. If Babysit surfaces another review generation before it stops, continue through the same playbook.
 
-Wait only while GitHub reports pending checks or review automation. Do not post `@codex review`, request another reviewer pass, add a quiet-period timer, or wait for generic reviewer silence. If GitHub reports the PR ready before another comment appears, stop. A later comment starts a new invocation.
+Run the watcher with `--require-codex-review`. In `drive` and `background` modes, also pass `--timeout 900`. Accept `CLEAN` only from the watcher's exact-head connector proof. That proof requires a `Completed` summary for the current head and the pull request's `THUMBS_UP` reaction from `chatgpt-codex-connector[bot]` at or after that completion, with the summary strictly after any current-head findings. Resolved threads do not turn connector findings into `CLEAN`; require a later clean connector result.
+
+Let the watcher own reaction propagation and its timeout. A finding-free `Completed` summary without the qualifying thumbs-up gets one normal watcher interval, then `TIMEOUT`. Missing or stale exact-head connector evidence remains pending until the 15-minute watcher deadline. Do not infer `CLEAN` from reviewer silence, an empty unresolved-thread list, `reviewDecision`, or GitHub's merge state. Do not add another poller or timer around the watcher.
+
+Wait only while the watcher reports pending checks, review automation, or required connector evidence. Do not post `@codex review`, request another reviewer pass, add a quiet-period timer, or wait for generic reviewer silence. If the watcher reports the PR ready before another comment appears, stop. A later comment starts a new invocation.
 
 Keep the original PR intent and preserve unrelated work. Do not churn code to satisfy a bot. Human-thread resolution requires separate explicit authorization.
 
