@@ -48,9 +48,10 @@ are currently ready.
 
 Archive directories must be inside the repository, visible or trackable by Git,
 and outside `.git`, `.asc`, `.ios-release`, credential directories, and generated
-output such as `build`, `dist`, or `DerivedData`. Symlinked project paths and
-archives beneath submodules or nested Git repositories are invalid because their
-contents are not owned by the synchronized parent commit. App keys, display
+output such as `build`, `dist`, or `DerivedData`. Source, Xcode, metadata, and
+archive paths must be visible to the parent repository; ignored paths, symlinks,
+submodules, and nested Git repositories are invalid because their contents are
+not owned by the synchronized parent commit. App keys, display
 names, and aliases are case-insensitive selectors and must not collide. Each
 configured app must have a unique App Store ID. Group IDs and names must be
 explicit selectors. Resolve live identity through the owning ASC skills before

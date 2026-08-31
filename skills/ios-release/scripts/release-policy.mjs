@@ -30,10 +30,12 @@ function parsePolicy(appKey, rawPolicy) {
     const seen = new Set();
     for (const [index, locale] of rawPolicy.locales.entries()) {
       if (!nonEmpty(locale) || !LOCALE.test(locale)) errors.push(`${location}.locales[${index}]: expected a valid locale`);
-      if (seen.has(locale)) errors.push(`${location}.locales: duplicate locale`);
-      seen.add(locale);
+      const normalized = nonEmpty(locale) ? locale.normalize('NFC').toLocaleLowerCase('en-US') : locale;
+      if (seen.has(normalized)) errors.push(`${location}.locales: duplicate locale`);
+      seen.add(normalized);
     }
-    if (nonEmpty(rawPolicy.sourceLocale) && !seen.has(rawPolicy.sourceLocale)) errors.push(`${location}.sourceLocale: must be included in locales`);
+    const sourceLocale = nonEmpty(rawPolicy.sourceLocale) ? rawPolicy.sourceLocale.normalize('NFC').toLocaleLowerCase('en-US') : rawPolicy.sourceLocale;
+    if (nonEmpty(rawPolicy.sourceLocale) && !seen.has(sourceLocale)) errors.push(`${location}.sourceLocale: must be included in locales`);
   }
   for (const field of ['tagPrefix', 'tone']) if (rawPolicy[field] !== undefined && !nonEmpty(rawPolicy[field])) errors.push(`${location}.${field}: expected a non-empty string`);
   if (!PROMOTIONAL_TEXT.has(rawPolicy.promotionalText)) errors.push(`${location}.promotionalText: expected preserve or suggest`);
