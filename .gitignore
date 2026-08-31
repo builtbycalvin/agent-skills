@@ -5,3 +5,4 @@
 *.pem
 *.key
 node_modules/
+.code-reviews/

@@ -42,6 +42,12 @@ A wrapper that commits only the manifest while leaving canonical generated outpu
 
 When the lane reuses an existing build and changes no tracked state, use the synchronized `HEAD` as both `sourceCommit` and `releaseCommit`.
 
+When resuming a release that already has a committed note archive, preserve the
+archive's original `sourceCommit`. Treat the synchronized current `HEAD` as the
+`releaseCommit` only after proving it has that source as its sole parent and its
+committed note file exactly matches the archive being checked. Never rewrite the
+archive identity to the newer release commit.
+
 ## Push only after remote readback
 
 After App Store Connect exposes the exact successful state, fetch the original upstream again.

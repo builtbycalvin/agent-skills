@@ -65,6 +65,12 @@ Copy approval is field-level and version-specific. An approved source-locale not
 
 For an update, App Store staging and submission require a valid archive matching app, version, source commit, source range, and locales. Missing notes require drafting and approval. Changed source commit, locale policy, or copy invalidates the gate. TestFlight does not use this gate.
 
+On a fresh release, check against the archived `sourceCommit`. On resume after
+the release-state commit is synchronized, the checker also accepts that exact
+one-parent `releaseCommit` only when its parent is the archived source and its
+committed note blob matches the archive. This preserves the immutable source
+identity without making an already-pushed release impossible to resume.
+
 The first App Store version has no What's New field. Skip the gate only after a live read proves there is no successfully shipped predecessor. A local empty history is insufficient.
 
 ## Metadata policy

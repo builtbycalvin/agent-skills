@@ -27,12 +27,19 @@ function addReason(reasons, code, detail) { reasons.push({ code, ...(detail ? { 
 function result(status, reasons, extra = {}) { return { status, state: status, valid: status === 'valid', reasons, errors: reasons.map((reason) => reason.detail ? `${reason.code}: ${reason.detail}` : reason.code), ...extra }; }
 function resolveCommit(repo, revision) { try { return runGit(repo, ['rev-parse', '--verify', '--end-of-options', `${revision}^{commit}`]); } catch { return null; } }
 function isAncestor(repo, base, head) { try { runGit(repo, ['merge-base', '--is-ancestor', base, head]); return true; } catch { return false; } }
-function validateGitEvidence(repo, requestedSourceCommit, frontmatter, reasons) {
+function isDirectChild(repo, parent, child) { try { const [commit, ...parents] = runGit(repo, ['rev-list', '--parents', '-n', '1', child]).split(' '); return commit === child && parents.length === 1 && parents[0] === parent; } catch { return false; } }
+function committedFileMatches(repo, commit, relative, content) { try { return execFileSync('git', ['-C', repo, 'show', `${commit}:${relative}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) === content; } catch { return false; } }
+function validateGitEvidence(repo, requestedSourceCommit, frontmatter, archiveRelative, markdown, reasons) {
   const recorded = String(frontmatter.sourceCommit ?? '');
-  if (recorded !== requestedSourceCommit) addReason(reasons, 'wrong-source-commit', `${recorded || '<missing>'} != ${requestedSourceCommit}`);
   if (!SOURCE_COMMIT.test(requestedSourceCommit) || !SOURCE_COMMIT.test(recorded)) { addReason(reasons, 'full-source-commit-required'); return; }
   const source = resolveCommit(repo, recorded);
+  const requested = resolveCommit(repo, requestedSourceCommit);
   if (!source) addReason(reasons, 'source-commit-unresolved', recorded);
+  if (!requested) addReason(reasons, 'requested-source-commit-unresolved', requestedSourceCommit);
+  else if (source && requested !== source) {
+    if (!isDirectChild(repo, source, requested)) addReason(reasons, 'wrong-source-commit', `${requested} is neither archived source ${source} nor its release commit`);
+    else if (!committedFileMatches(repo, requested, archiveRelative, markdown)) addReason(reasons, 'release-note-not-in-release-commit', archiveRelative);
+  }
   const range = typeof frontmatter.sourceRange === 'string' && !frontmatter.sourceRange.includes('...') ? frontmatter.sourceRange.split('..') : [];
   if (range.length !== 2 || range.some((part) => !part)) { addReason(reasons, 'source-range-invalid', String(frontmatter.sourceRange ?? '<missing>')); return; }
   const base = resolveCommit(repo, range[0]);
@@ -52,7 +59,7 @@ export function checkReleaseNote(input) {
   const target = createReleasePolicyBoundary(repo).resolveNote(input.app, policy, version); if (!target.ok) return result('conflict', target.reasons, { path: null }); const { archivePath, archiveRelative } = target.value;
   let markdown; try { markdown = readFileSync(archivePath, 'utf8'); } catch (error) { if (error.code === 'ENOENT') return result('missing', [{ code: 'missing-archive', detail: archiveRelative }], { path: archivePath }); return result('conflict', [{ code: 'archive-unreadable', detail: error.message }], { path: archivePath }); }
   const parsed = parseReleaseNote(markdown, archiveRelative); reasons.push(...parsed.errors.map((detail) => ({ code: 'malformed-note', detail }))); const frontmatter = parsed.frontmatter;
-  if (!object(frontmatter)) return result('conflict', reasons, { path: archivePath, parsed }); if (frontmatter.app !== input.app) addReason(reasons, 'wrong-app', `${frontmatter.app ?? '<missing>'} != ${input.app}`); if (frontmatter.marketingVersion !== version) addReason(reasons, 'wrong-version', `${frontmatter.marketingVersion ?? '<missing>'} != ${version}`); validateGitEvidence(repo, sourceCommit, frontmatter, reasons);
+  if (!object(frontmatter)) return result('conflict', reasons, { path: archivePath, parsed }); if (frontmatter.app !== input.app) addReason(reasons, 'wrong-app', `${frontmatter.app ?? '<missing>'} != ${input.app}`); if (frontmatter.marketingVersion !== version) addReason(reasons, 'wrong-version', `${frontmatter.marketingVersion ?? '<missing>'} != ${version}`); validateGitEvidence(repo, sourceCommit, frontmatter, archiveRelative, markdown, reasons);
   const expected = target.value.locales; const actual = Array.isArray(frontmatter.locales) ? frontmatter.locales : []; if (new Set(actual).size !== actual.length) addReason(reasons, 'duplicate-locale'); if (JSON.stringify(actual) !== JSON.stringify(expected)) addReason(reasons, 'locale-coverage-mismatch', `${JSON.stringify(actual)} != ${JSON.stringify(expected)}`); const appStoreLocales = Object.keys(parsed.appStore); if (JSON.stringify(appStoreLocales) !== JSON.stringify(expected)) addReason(reasons, 'app-store-section-locale-mismatch', `${JSON.stringify(appStoreLocales)} != ${JSON.stringify(expected)}`); for (const locale of expected) { const text = parsed.appStore[locale]; if (typeof text !== 'string' || text.trim().length === 0) addReason(reasons, 'missing-locale', locale); else if (text.length > 4000) addReason(reasons, 'over-limit', `${locale} is ${text.length} characters`); } const promoLocales = Object.keys(parsed.promotionalText); if (target.value.promotionalText === 'preserve' && promoLocales.length) addReason(reasons, 'promotional-text-forbidden-by-policy'); if (promoLocales.length && JSON.stringify(promoLocales) !== JSON.stringify(expected)) addReason(reasons, 'promotional-text-locale-mismatch', `${JSON.stringify(promoLocales)} != ${JSON.stringify(expected)}`); for (const locale of promoLocales) { const text = parsed.promotionalText[locale]; if (!text) addReason(reasons, 'empty-promotional-text', locale); else if (text.length > 170) addReason(reasons, 'promotional-text-over-limit', `${locale} is ${text.length} characters`); }
   if (reasons.length) return result('conflict', reasons, { path: archivePath, parsed }); return result('valid', [], { path: archivePath, archiveRelative, parsed });
 }
