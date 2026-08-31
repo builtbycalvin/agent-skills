@@ -15,9 +15,10 @@ function runGit(repo, args) { return execFileSync('git', ['-C', repo, ...args], 
 function repoRoot(candidate) { return path.resolve(runGit(path.resolve(candidate), ['rev-parse', '--show-toplevel'])); }
 function inside(root, candidate) { const relative = path.relative(root, candidate); return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); }
 function gitMetadataDirectories(repo) { return [...new Set(['--git-dir', '--git-common-dir'].map((flag) => realpathSync.native(path.resolve(repo, runGit(repo, ['rev-parse', flag])))))]; }
-function ignored(repo, relative) { try { runGit(repo, ['check-ignore', '--quiet', '--no-index', '--', relative]); return true; } catch { return false; } }
+function ignoreMatch(repo, relative) { try { const fields = execFileSync('git', ['-C', repo, 'check-ignore', '-z', '-v', '--no-index', '--stdin'], { input: `${relative}\0`, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).split('\0'); return { source: fields[0], line: fields[1], pattern: fields[2], path: fields[3] }; } catch (error) { if (error.status === 1) return null; throw error; } }
+function ignored(repo, relative) { const match = ignoreMatch(repo, relative); return Boolean(match && !match.pattern.startsWith('!')); }
 function tracked(repo, relative) { return runGit(repo, ['ls-files', '--', relative]).length > 0; }
-function gitlink(repo, relative) { try { return runGit(repo, ['ls-files', '--stage', '--', relative]).split('\n').some((line) => line.startsWith('160000 ')); } catch { return false; } }
+function gitlink(repo, relative) { return execFileSync('git', ['-C', repo, 'ls-files', '--stage', '-z', '--', relative], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).split('\0').filter(Boolean).some((record) => { const match = /^(\d{6}) ([0-9a-f]+) ([0-3])\t([\s\S]+)$/.exec(record); if (!match) throw new Error('Git index returned an invalid entry'); return match[1] === '160000' && match[4] === relative; }); }
 
 function parsePolicy(appKey, rawPolicy) {
   const location = `apps.${appKey}.releaseNotes`;
@@ -76,8 +77,8 @@ function resolveRepositoryPath(repo, metadataDirectories, value, location, allow
       break;
     }
   }
-  const isIgnored = ignored(repo, relative) || (directoryCandidate && ignored(repo, `${relative}${path.sep}`));
-  if (isIgnored && !(allowTracked && tracked(repo, relative))) errors.push(`${location}: path is ignored`);
+  const gitRelative = relative.split(path.sep).join('/'); const isIgnored = errors.length === 0 && (ignored(repo, gitRelative) || (directoryCandidate && ignored(repo, `${gitRelative}/`))); const markdownIgnored = errors.length === 0 && directoryCandidate && ignored(repo, `${gitRelative}/0.0.0.md`);
+  if ((isIgnored && !(allowTracked && tracked(repo, relative))) || markdownIgnored) errors.push(`${location}: path is ignored`);
   if (errors.length) return { ok: false, errors };
   return { ok: true, value: { relative, absolute }, errors: [] };
 }

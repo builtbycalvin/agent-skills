@@ -13,7 +13,7 @@ Write `<archiveDirectory>/<marketingVersion>.md` with JSON front matter between 
   "app": "example",
   "marketingVersion": "2.4.0",
   "sourceCommit": "0123456789abcdef0123456789abcdef01234567",
-  "sourceRange": "ios/2.3.0..0123456789abcdef0123456789abcdef01234567",
+  "sourceRange": "fedcba9876543210fedcba9876543210fedcba98..0123456789abcdef0123456789abcdef01234567",
   "locales": ["en-US", "zh-Hant"]
 }
 ---
@@ -50,6 +50,8 @@ Prefer evidence in this order:
 2. the newest successfully shipped ASC version mapped to a repository tag;
 3. canonical changelog or release artifacts;
 4. user-visible source changes in the proved range.
+
+Resolve the proved shipped tag once, then store its full commit ID as the `sourceRange` base. A tag or branch name is not immutable archived evidence.
 
 If shipped ASC state and tags disagree, stop and present the candidates. Do not silently use the newest tag. Separate customer-visible changes from internal work. Never promise performance, security, compatibility, or behavior that the evidence does not prove.
 

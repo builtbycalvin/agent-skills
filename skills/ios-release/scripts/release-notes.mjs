@@ -15,11 +15,13 @@ function duplicateTopLevelJsonKeys(raw) { const seen = new Set(); const duplicat
 function runGit(repo, args) { return execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
 function repoRoot(repo) { return path.resolve(runGit(path.resolve(repo), ['rev-parse', '--show-toplevel'])); }
 function inside(root, candidate) { const relative = path.relative(root, candidate); return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); }
+function indexEntries(repo, relative) { return execFileSync('git', ['-C', repo, 'ls-files', '--stage', '-z', '--', relative], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).split('\0').filter(Boolean).map((record) => { const match = /^(\d{6}) ([0-9a-f]+) ([0-3])\t([\s\S]+)$/.exec(record); if (!match) throw new Error('Git index returned an invalid entry'); return { mode: match[1], path: match[4] }; }); }
 function safeConfigPath(repo, candidate) {
   const configPath = path.resolve(repo, candidate);
   const canonicalRepo = realpathSync.native(repo);
   if (!inside(repo, configPath)) throw new Error('configuration path escapes the repository');
-  let current = repo; for (const part of path.relative(repo, configPath).split(path.sep).filter(Boolean)) { current = path.join(current, part); if (lstatSync(current).isSymbolicLink()) throw new Error('configuration path has a symlinked component'); }
+  const relative = path.relative(repo, configPath); const parts = relative.split(path.sep).filter(Boolean); for (let index = 1; index <= parts.length; index += 1) { const prefix = parts.slice(0, index).join('/'); if (indexEntries(repo, prefix).some((entry) => entry.mode === '160000' && entry.path === prefix)) throw new Error('configuration path is inside a Git submodule'); }
+  let current = repo; for (const part of parts) { current = path.join(current, part); if (lstatSync(current).isSymbolicLink()) throw new Error('configuration path has a symlinked component'); }
   const info = lstatSync(configPath);
   if (info.isSymbolicLink()) throw new Error('configuration path is symlinked');
   if (!info.isFile()) throw new Error('configuration path is not a regular file');
@@ -63,6 +65,8 @@ function validateGitEvidence(repo, requestedSourceCommit, frontmatter, archiveRe
   }
   const range = typeof frontmatter.sourceRange === 'string' && !frontmatter.sourceRange.includes('...') ? frontmatter.sourceRange.split('..') : [];
   if (range.length !== 2 || range.some((part) => !part)) { addReason(reasons, 'source-range-invalid', String(frontmatter.sourceRange ?? '<missing>')); return; }
+  if (!SOURCE_COMMIT.test(range[0])) { addReason(reasons, 'source-range-base-full-commit-required', range[0]); return; }
+  if (!SOURCE_COMMIT.test(range[1])) { addReason(reasons, 'source-range-head-full-commit-required', range[1]); return; }
   const base = resolveCommit(repo, range[0]);
   const head = resolveCommit(repo, range[1]);
   if (!base || !head) addReason(reasons, 'source-range-unresolved', frontmatter.sourceRange);
