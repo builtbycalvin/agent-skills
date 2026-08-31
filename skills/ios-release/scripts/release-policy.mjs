@@ -43,7 +43,7 @@ function parsePolicy(appKey, rawPolicy) {
   return { ok: true, value: { ...rawPolicy, locales: [...rawPolicy.locales] }, errors: [], missing: [] };
 }
 
-function resolveRepositoryPath(repo, value, location, allowTracked = false) {
+function resolveRepositoryPath(repo, value, location, allowTracked = false, directoryCandidate = false) {
   const errors = [];
   if (!nonEmpty(value)) return { ok: false, errors: [`${location}: expected a non-empty relative path`] };
   if (path.isAbsolute(value) || path.win32.isAbsolute(value)) return { ok: false, errors: [`${location}: absolute paths are forbidden`] };
@@ -70,7 +70,8 @@ function resolveRepositoryPath(repo, value, location, allowTracked = false) {
       break;
     }
   }
-  if (ignored(repo, relative) && !(allowTracked && tracked(repo, relative))) errors.push(`${location}: path is ignored`);
+  const isIgnored = ignored(repo, relative) || (directoryCandidate && ignored(repo, `${relative}${path.sep}`));
+  if (isIgnored && !(allowTracked && tracked(repo, relative))) errors.push(`${location}: path is ignored`);
   if (errors.length) return { ok: false, errors };
   return { ok: true, value: { relative, absolute }, errors: [] };
 }
@@ -83,7 +84,7 @@ export function createReleasePolicyBoundary(repoCandidate) {
   function validateConfigured(appKey, rawPolicy) {
     const parsed = parsePolicy(appKey, rawPolicy);
     if (!parsed.ok) return parsed;
-    const archive = resolveRepositoryPath(repo, parsed.value.archiveDirectory, `apps.${appKey}.releaseNotes.archiveDirectory`);
+    const archive = resolveRepositoryPath(repo, parsed.value.archiveDirectory, `apps.${appKey}.releaseNotes.archiveDirectory`, false, true);
     if (!archive.ok) return { ok: false, errors: archive.errors, missing: [] };
     try {
       if (!lstatSync(archive.value.absolute).isDirectory()) return { ok: false, errors: [`apps.${appKey}.releaseNotes.archiveDirectory: existing path is not a directory`], missing: [] };

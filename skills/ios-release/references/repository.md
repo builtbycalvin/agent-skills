@@ -43,10 +43,15 @@ A wrapper that commits only the manifest while leaving canonical generated outpu
 When the lane reuses an existing build and changes no tracked state, use the synchronized `HEAD` as both `sourceCommit` and `releaseCommit`.
 
 When resuming a release that already has a committed note archive, preserve the
-archive's original `sourceCommit`. Treat the synchronized current `HEAD` as the
-`releaseCommit` only after proving it has that source as its sole parent and its
-committed note file exactly matches the archive being checked. Never rewrite the
-archive identity to the newer release commit.
+archive's original `sourceCommit`. A clean attached `HEAD` may be one intentionally
+unpushed `releaseCommit` ahead of the fetched upstream only when the upstream still
+equals that archived source, `releaseCommit` has `sourceCommit` as its sole parent,
+its tree and changed paths match the recorded release artifact and allowlist, and
+its committed note file exactly matches the archive being checked. Resume by
+reading the exact remote build and release state; do not rebuild, re-upload, or
+rewrite the archive identity. When synchronized `HEAD` is both `sourceCommit` and
+`releaseCommit`, require the committed note match but not the distinct-commit parent,
+tree, or changed-path proof.
 
 ## Push only after remote readback
 

@@ -62,6 +62,7 @@ function validateRepositoryPath(repo, resolved, location, errors) {
 }
 function relativePath(repo, value, location, errors, options = {}) {
   if (!nonEmpty(value)) { errors.push(`${location}: expected a non-empty relative path`); return null; }
+  if (CREDENTIAL_PATH.test(value)) errors.push(`${location}: credential or private-key paths are forbidden`);
   if (path.isAbsolute(value) || path.win32.isAbsolute(value)) { errors.push(`${location}: absolute paths are forbidden`); return null; }
   const resolved = path.resolve(repo, value);
   const rel = path.relative(repo, resolved);
@@ -76,7 +77,6 @@ function inspectSecrets(value, location, errors) {
   if (Array.isArray(value)) return value.forEach((item, index) => inspectSecrets(item, `${location}[${index}]`, errors));
   if (object(value)) { const dynamicAppMap = location === '$.apps'; return Object.entries(value).forEach(([key, item]) => { if (!dynamicAppMap && SECRET_KEY.test(key)) errors.push(`${location}.${key}: secret-shaped keys are forbidden`); if (!dynamicAppMap && TRANSIENT_KEYS.has(key)) errors.push(`${location}.${key}: transient release state is forbidden`); inspectSecrets(item, `${location}.${key}`, errors); }); }
   if (typeof value === 'string' && PRIVATE_KEY.test(value)) errors.push(`${location}: private-key material is forbidden`);
-  if (typeof value === 'string' && CREDENTIAL_PATH.test(value)) errors.push(`${location}: credential or private-key paths are forbidden`);
 }
 function optionalString(value, location, errors) { if (value !== undefined && !nonEmpty(value)) errors.push(`${location}: expected a non-empty string`); }
 function validateGroup(group, location, errors, ids) {
@@ -94,7 +94,7 @@ function validateApp(repo, policies, key, app, errors, missing) {
   optionalString(app.displayName, `${location}.displayName`, errors);
   if (app.aliases !== undefined) { if (!Array.isArray(app.aliases)) errors.push(`${location}.aliases: expected an array`); else { const seen = new Set(); app.aliases.forEach((alias, index) => { optionalString(alias, `${location}.aliases[${index}]`, errors); if (!nonEmpty(alias)) return; const normalized = alias.toLocaleLowerCase('en-US'); if (seen.has(normalized)) errors.push(`${location}.aliases: duplicate alias`); seen.add(normalized); }); } }
   relativePath(repo, app.sourceRoot ?? '.', `${location}.sourceRoot`, errors, { requireVisible: true });
-  for (const field of ['bundleId', 'appId']) { if (!nonEmpty(app[field])) missing.push(`${location}.${field}`); else if (CREDENTIAL_PATH.test(app[field])) errors.push(`${location}.${field}: credential or private-key paths are forbidden`); }
+  for (const field of ['bundleId', 'appId']) if (!nonEmpty(app[field])) missing.push(`${location}.${field}`);
   if (app.platform !== 'IOS') { if (app.platform !== undefined) errors.push(`${location}.platform: expected IOS`); missing.push(`${location}.platform`); }
   if (!object(app.xcode)) { missing.push(`${location}.xcode`); } else { unknown(app.xcode, XCODE_FIELDS, `${location}.xcode`, errors); const containers = ['project', 'workspace'].filter((field) => app.xcode[field] !== undefined); if (containers.length !== 1) errors.push(`${location}.xcode: expected exactly one of project or workspace`); containers.forEach((field) => relativePath(repo, app.xcode[field], `${location}.xcode.${field}`, errors, { requireVisible: true })); for (const field of ['scheme', 'configuration']) { if (!nonEmpty(app.xcode[field])) missing.push(`${location}.xcode.${field}`); } }
   if (app.testflight !== undefined) { if (!object(app.testflight)) errors.push(`${location}.testflight: expected an object`); else { unknown(app.testflight, TESTFLIGHT_FIELDS, `${location}.testflight`, errors); const ids = new Set(); for (const field of TESTFLIGHT_FIELDS) { if (app.testflight[field] === undefined) continue; if (!Array.isArray(app.testflight[field])) errors.push(`${location}.testflight.${field}: expected an array`); else app.testflight[field].forEach((group, index) => validateGroup(group, `${location}.testflight.${field}[${index}]`, errors, ids)); } } }
