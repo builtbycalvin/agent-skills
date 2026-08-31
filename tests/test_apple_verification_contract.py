@@ -273,6 +273,75 @@ class AppleVerificationContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "stale or changed"):
             validator.validate_receipt(receipt, self.repository, required_check_names=["ios-tests"])
 
+    def test_staged_ignored_build_input_remains_in_the_working_content_tree(self):
+        (self.repository / ".gitignore").write_text("Config.xcconfig\n", encoding="utf-8")
+        run(self.repository, "git", "add", ".gitignore")
+        run(self.repository, "git", "commit", "-qm", "ignore local config")
+        config = self.repository / "Config.xcconfig"
+        config.write_text("FLAG = YES\n", encoding="utf-8")
+        run(self.repository, "git", "add", "-f", "Config.xcconfig")
+        before = validator.working_content_tree(self.repository)
+        config.write_text("FLAG = NO\n", encoding="utf-8")
+        after = validator.working_content_tree(self.repository)
+        self.assertNotEqual(before, after)
+
+    def test_deleting_a_tracked_ignored_build_input_needs_no_include(self):
+        config = self.repository / "Config.xcconfig"
+        config.write_text("FLAG = YES\n", encoding="utf-8")
+        (self.repository / ".gitignore").write_text("Config.xcconfig\n", encoding="utf-8")
+        run(self.repository, "git", "add", "-f", "Config.xcconfig", ".gitignore")
+        run(self.repository, "git", "commit", "-qm", "track ignored config")
+        config.unlink()
+        run(self.repository, "git", "add", "-u", "Config.xcconfig")
+        tree = validator.working_content_tree(self.repository)
+        receipt = valid_receipt(self.repository, tree)
+        receipt["classification"]["paths"] = ["Config.xcconfig"]
+        validator.validate_receipt(receipt, self.repository, required_check_names=["ios-tests"])
+
+    def test_recreated_tracked_ignored_build_input_requires_include(self):
+        config = self.repository / "Config.xcconfig"
+        config.write_text("FLAG = YES\n", encoding="utf-8")
+        (self.repository / ".gitignore").write_text("Config.xcconfig\n", encoding="utf-8")
+        run(self.repository, "git", "add", "-f", "Config.xcconfig", ".gitignore")
+        run(self.repository, "git", "commit", "-qm", "track ignored config")
+        config.unlink()
+        run(self.repository, "git", "add", "-u", "Config.xcconfig")
+        config.write_text("FLAG = NO\n", encoding="utf-8")
+        omitted_tree = validator.working_content_tree(self.repository)
+        omitted = valid_receipt(self.repository, omitted_tree)
+        omitted["classification"]["paths"] = ["Config.xcconfig"]
+        with self.assertRaisesRegex(ValueError, "missing from identity included_paths"):
+            validator.validate_receipt(omitted, self.repository, required_check_names=["ios-tests"])
+        included_tree = validator.working_content_tree(self.repository, ["Config.xcconfig"])
+        self.assertNotEqual(omitted_tree, included_tree)
+
+    def test_unregistered_embedded_repository_is_rejected(self):
+        embedded = self.repository / "Vendor" / "Embedded"
+        embedded.mkdir(parents=True)
+        run(embedded, "git", "init", "-q")
+        run(embedded, "git", "config", "user.name", "Contract Test")
+        run(embedded, "git", "config", "user.email", "contract@example.invalid")
+        (embedded / "Dependency.swift").write_text("let dependency = 1\n", encoding="utf-8")
+        run(embedded, "git", "add", ".")
+        run(embedded, "git", "commit", "-qm", "embedded fixture")
+        with self.assertRaisesRegex(ValueError, "embedded repositories"):
+            validator.working_content_tree(self.repository)
+
+    def test_repository_argument_must_be_the_worktree_root(self):
+        with self.assertRaisesRegex(ValueError, "worktree root"):
+            validator.working_content_tree(self.repository / "App")
+
+    def test_working_content_tree_detects_executable_mode_changes(self):
+        script = self.repository / "build.sh"
+        script.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        run(self.repository, "git", "add", "build.sh")
+        run(self.repository, "git", "commit", "-qm", "add build script")
+        run(self.repository, "git", "config", "core.fileMode", "false")
+        before = validator.working_content_tree(self.repository)
+        script.chmod(0o755)
+        after = validator.working_content_tree(self.repository)
+        self.assertNotEqual(before, after)
+
     def test_dirty_submodule_is_rejected(self):
         with tempfile.TemporaryDirectory(prefix="swift dependency ") as dependency_root:
             dependency = Path(dependency_root)
@@ -358,6 +427,11 @@ class AppleVerificationContractTests(unittest.TestCase):
         for skill in ("local-review-until-clean", "pr-until-ready"):
             text = (ROOT / "skills" / skill / "SKILL.md").read_text(encoding="utf-8")
             self.assertIn("references/apple-local-verification.md", text)
+        pr_text = (ROOT / "skills" / "pr-until-ready" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "When equivalent macOS CI covers the same content and applicable checks",
+            pr_text,
+        )
 
 
 if __name__ == "__main__":

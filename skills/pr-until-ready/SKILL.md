@@ -39,7 +39,7 @@ Keep the original PR intent and preserve unrelated work. Do not churn code to sa
 
 Classify the actual PR diff, not the repository's language inventory. Do not run iOS tests merely because Swift exists elsewhere. When the repository has an Apple target or the PR paths may be Apple build inputs, read and follow [the shared Apple local verification contract](references/apple-local-verification.md). Docs-only and non-Apple-service-only PRs are excluded. Mixed changes are not.
 
-GitHub or Linux CI is not sufficient Apple proof when no macOS job covers the same content and applicable checks. Before reporting an Apple-build-affecting PR merge-ready, require a valid local receipt whose `head_oid`, `head_tree`, and `content_tree` match the exact current PR head and whose final checks satisfy the affected target. Reuse a valid receipt for unchanged content. Treat absent, incomplete, or stale evidence as missing and run the applicable local verification. Route a failed receipt through `route_verification`: `check-only` blocks; `repair-authorized` diagnoses the failure and repairs only after the cause is validated in scope.
+GitHub or Linux CI is not sufficient Apple proof when no macOS job covers the same content and applicable checks. When equivalent macOS CI covers the same content and applicable checks, record that CI evidence under the required-check outcome contract. Otherwise, before reporting an Apple-build-affecting PR merge-ready, require a valid local receipt whose `head_oid`, `head_tree`, and `content_tree` match the exact current PR head and whose final checks satisfy the affected target. Reuse a valid receipt for unchanged content. Treat absent, incomplete, or stale evidence as missing and run the applicable local verification. Route a failed receipt through `route_verification`: `check-only` blocks; `repair-authorized` diagnoses the failure and repairs only after the cause is validated in scope.
 
 Run final local verification only after the repair wave is complete, pushed when the selected mode authorizes it, and the PR head is stable. Do not rerun it on polling iterations or merely because a review comment arrived. Any repair wave that changes Apple-build-affecting content invalidates old evidence. A commit-only change that preserves the same content tree does not, but the receipt must still identify the current PR head before readiness is reported.
 
@@ -53,7 +53,7 @@ Classify every candidate final check under [the shared required-check outcome co
 
 ## Ready or ship
 
-Stop when Babysit reports the PR or frontier merge-ready, every applicable required check is `PASS`, and any applicable Apple receipt matches the exact current head and tree, unless the user explicitly authorized merging. For an authorized merge, hand the exact PR or frozen stack to Poteto's Shipping playbook and follow it in full. Shipping must independently re-verify the current state before it arms or merges anything. Do not merge from Babysit.
+Stop when Babysit reports the PR or frontier merge-ready, every applicable required check is `PASS`, and the Apple evidence is either equivalent macOS CI or a local receipt that matches the exact current head and tree, unless the user explicitly authorized merging. For an authorized merge, hand the exact PR or frozen stack to Poteto's Shipping playbook and follow it in full. Shipping must independently re-verify the current state before it arms or merges anything. Do not merge from Babysit.
 
 ## Stop unfinished
 

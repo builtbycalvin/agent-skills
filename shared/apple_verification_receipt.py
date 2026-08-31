@@ -69,6 +69,17 @@ def git(repository, *args, env=None):
     ).stdout.strip()
 
 
+def require_repository_root(repository):
+    repository = Path(repository).resolve()
+    try:
+        worktree_root = Path(git(repository, "rev-parse", "--show-toplevel")).resolve()
+    except subprocess.CalledProcessError as error:
+        raise ValueError("--repository must name a Git worktree root") from error
+    if repository != worktree_root:
+        raise ValueError("--repository must name the Git worktree root")
+    return repository
+
+
 def reject_unsupported_submodules(repository):
     status = subprocess.run(
         ["git", "-C", str(repository), "submodule", "status", "--recursive"],
@@ -103,6 +114,42 @@ def reject_unsupported_submodules(repository):
         )
 
 
+def reject_unregistered_gitlinks(repository, environment):
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repository),
+            "config",
+            "--file",
+            ".gitmodules",
+            "--get-regexp",
+            r"^submodule\..*\.path$",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode not in {0, 1}:
+        raise ValueError("could not read registered submodule paths")
+    registered = {
+        line.split(maxsplit=1)[1]
+        for line in result.stdout.splitlines()
+        if len(line.split(maxsplit=1)) == 2
+    }
+    staged = git(repository, "ls-files", "--stage", "-z", env=environment)
+    gitlinks = {
+        entry.split("\t", 1)[1]
+        for entry in staged.split("\0")
+        if entry.startswith("160000 ") and "\t" in entry
+    }
+    unregistered = gitlinks - registered
+    if unregistered:
+        raise ValueError(
+            "unregistered embedded repositories are a hard blocker: "
+            + ", ".join(sorted(unregistered))
+        )
+
+
 def require_repo_path(repository, value, field, *, allow_empty=False):
     repository = Path(repository).resolve()
     if not isinstance(value, list) or (not allow_empty and not value):
@@ -126,16 +173,27 @@ def require_repo_path(repository, value, field, *, allow_empty=False):
 
 
 def working_content_tree(repository, included_paths=()):
-    repository = Path(repository).resolve()
+    repository = require_repository_root(repository)
     included_paths = require_repo_path(repository, list(included_paths), "identity.included_paths", allow_empty=True)
     reject_unsupported_submodules(repository)
+    index_tree = git(repository, "write-tree")
     with tempfile.TemporaryDirectory(prefix="apple-verification-index-") as index_directory:
         environment = os.environ.copy()
         environment["GIT_INDEX_FILE"] = str(Path(index_directory) / "index")
-        git(repository, "read-tree", "HEAD", env=environment)
-        git(repository, "add", "-A", "--", ".", env=environment)
+        git(repository, "read-tree", index_tree, env=environment)
+        git(repository, "-c", "core.fileMode=true", "add", "-A", "--", ".", env=environment)
         if included_paths:
-            git(repository, "add", "-f", "--", *included_paths, env=environment)
+            git(
+                repository,
+                "-c",
+                "core.fileMode=true",
+                "add",
+                "-f",
+                "--",
+                *included_paths,
+                env=environment,
+            )
+        reject_unregistered_gitlinks(repository, environment)
         return git(repository, "write-tree", env=environment)
 
 
@@ -147,6 +205,9 @@ def ignored_untracked_paths(repository, paths):
             capture_output=True,
         )
         if tracked.returncode == 0:
+            continue
+        tracked_by_head = git(repository, "ls-tree", "-r", "--name-only", "HEAD", "--", path)
+        if tracked_by_head and not os.path.lexists(repository / path):
             continue
         result = subprocess.run(
             ["git", "-C", str(repository), "check-ignore", "-q", "--", path],
@@ -197,7 +258,7 @@ def validate_receipt(receipt, repository, *, head_oid=None, required_check_names
         raise ValueError(f"unknown fields: {', '.join(sorted(extra))}")
     if receipt["schema"] != "apple-local-verification/v1":
         raise ValueError("unsupported schema")
-    repository = Path(repository).resolve()
+    repository = require_repository_root(repository)
     require_nonempty_string(receipt["repository"], "repository")
     receipt_repository = Path(receipt["repository"])
     if not receipt_repository.is_absolute() or receipt_repository.resolve() != repository:
