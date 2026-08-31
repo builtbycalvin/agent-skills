@@ -9,11 +9,12 @@ Write `<archiveDirectory>/<marketingVersion>.md` with JSON front matter between 
 ```markdown
 ---
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "app": "example",
   "marketingVersion": "2.4.0",
   "sourceCommit": "0123456789abcdef0123456789abcdef01234567",
   "sourceRange": "fedcba9876543210fedcba9876543210fedcba98..0123456789abcdef0123456789abcdef01234567",
+  "sourceLocale": "en-US",
   "locales": ["en-US", "zh-Hant"]
 }
 ---
