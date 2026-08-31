@@ -3,7 +3,7 @@ import { lstatSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 const DIRECTORY = '.ios-release';
-const FORBIDDEN = new Set(['.git', '.asc', DIRECTORY, 'credentials', 'DerivedData', 'build', 'dist']);
+const FORBIDDEN = new Set(['.git', '.asc', DIRECTORY, 'credentials', 'deriveddata', 'build', 'dist']);
 const LOCALE = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const PROMOTIONAL_TEXT = new Set(['preserve', 'suggest']);
 const RELEASE_FIELDS = new Set(['archiveDirectory', 'sourceLocale', 'locales', 'tagPrefix', 'tone', 'promotionalText']);
@@ -15,6 +15,7 @@ function repoRoot(candidate) { return path.resolve(runGit(path.resolve(candidate
 function inside(root, candidate) { const relative = path.relative(root, candidate); return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); }
 function ignored(repo, relative) { try { runGit(repo, ['check-ignore', '--quiet', '--no-index', '--', relative]); return true; } catch { return false; } }
 function tracked(repo, relative) { return runGit(repo, ['ls-files', '--', relative]).length > 0; }
+function gitlink(repo, relative) { try { return runGit(repo, ['ls-files', '--stage', '--', relative]).split('\n').some((line) => line.startsWith('160000 ')); } catch { return false; } }
 
 function parsePolicy(appKey, rawPolicy) {
   const location = `apps.${appKey}.releaseNotes`;
@@ -48,7 +49,8 @@ function resolveRepositoryPath(repo, value, location, allowTracked = false) {
   if (!inside(repo, absolute)) return { ok: false, errors: [`${location}: path escapes the repository`] };
   const relative = path.relative(repo, absolute);
   const parts = relative.split(path.sep).filter(Boolean);
-  if (parts.some((part) => FORBIDDEN.has(part))) errors.push(`${location}: unsafe generated, local, or credential location`);
+  if (parts.some((part) => FORBIDDEN.has(part.normalize('NFC').toLocaleLowerCase('en-US')))) errors.push(`${location}: unsafe generated, local, or credential location`);
+  for (let index = 1; index <= parts.length; index += 1) if (gitlink(repo, parts.slice(0, index).join(path.sep))) { errors.push(`${location}: path is inside a Git submodule`); break; }
   const canonicalRepo = realpathSync.native(repo);
   let current = repo;
   for (const part of parts) {
@@ -57,6 +59,9 @@ function resolveRepositoryPath(repo, value, location, allowTracked = false) {
       const info = lstatSync(current);
       if (info.isSymbolicLink()) { errors.push(`${location}: symlinks are forbidden`); break; }
       if (!inside(canonicalRepo, realpathSync.native(current))) { errors.push(`${location}: path escapes the repository`); break; }
+      if (info.isDirectory()) {
+        try { if (realpathSync.native(repoRoot(current)) !== canonicalRepo) { errors.push(`${location}: path is inside another Git repository`); break; } } catch { /* A normal untracked directory may not be a Git worktree. */ }
+      }
     } catch (error) {
       if (error.code === 'ENOENT') break;
       errors.push(`${location}: path is not inspectable: ${error.message}`);
