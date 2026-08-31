@@ -4,6 +4,7 @@ import path from 'node:path';
 
 const DIRECTORY = '.ios-release';
 const FORBIDDEN = new Set(['.git', '.asc', DIRECTORY, 'credentials', 'deriveddata', 'build', 'dist']);
+const PATH_LINE_BREAK = /[\r\n]/;
 const LOCALE = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const PROMOTIONAL_TEXT = new Set(['preserve', 'suggest']);
 const RELEASE_FIELDS = new Set(['archiveDirectory', 'sourceLocale', 'locales', 'tagPrefix', 'tone', 'promotionalText']);
@@ -22,7 +23,8 @@ function parsePolicy(appKey, rawPolicy) {
   const location = `apps.${appKey}.releaseNotes`;
   const errors = [];
   const missing = [];
-  if (!object(rawPolicy)) return { ok: false, errors: [`${location}: expected an object`], missing: [location] };
+  if (rawPolicy === undefined) return { ok: false, errors: [], missing: [location] };
+  if (!object(rawPolicy)) return { ok: false, errors: [`${location}: expected an object`], missing: [] };
   for (const key of Object.keys(rawPolicy)) if (!RELEASE_FIELDS.has(key)) errors.push(`${location}.${key}: unknown field`);
   if (!nonEmpty(rawPolicy.archiveDirectory)) errors.push(`${location}.archiveDirectory: expected a non-empty relative path`);
   if (!nonEmpty(rawPolicy.sourceLocale) || !LOCALE.test(rawPolicy.sourceLocale)) errors.push(`${location}.sourceLocale: expected a valid locale`);
@@ -47,6 +49,7 @@ function parsePolicy(appKey, rawPolicy) {
 function resolveRepositoryPath(repo, metadataDirectories, value, location, allowTracked = false, directoryCandidate = false) {
   const errors = [];
   if (!nonEmpty(value)) return { ok: false, errors: [`${location}: expected a non-empty relative path`] };
+  if (PATH_LINE_BREAK.test(value)) return { ok: false, errors: [`${location}: carriage returns and newlines are forbidden`] };
   if (path.isAbsolute(value) || path.win32.isAbsolute(value)) return { ok: false, errors: [`${location}: absolute paths are forbidden`] };
   const absolute = path.resolve(repo, value);
   if (!inside(repo, absolute)) return { ok: false, errors: [`${location}: path escapes the repository`] };
