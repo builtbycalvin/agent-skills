@@ -77,7 +77,7 @@ function resolveRepositoryPath(repo, metadataDirectories, value, location, allow
       break;
     }
   }
-  const gitRelative = relative.split(path.sep).join('/'); const isIgnored = errors.length === 0 && (ignored(repo, gitRelative) || (directoryCandidate && ignored(repo, `${gitRelative}/`))); const markdownIgnored = errors.length === 0 && directoryCandidate && ignored(repo, `${gitRelative}/0.0.0.md`);
+  const gitRelative = relative.split(path.sep).join('/') || '.'; const isIgnored = errors.length === 0 && (ignored(repo, gitRelative) || (directoryCandidate && gitRelative !== '.' && ignored(repo, `${gitRelative}/`))); const markdownCandidate = gitRelative === '.' ? '0.0.0.md' : `${gitRelative}/0.0.0.md`; const markdownIgnored = errors.length === 0 && directoryCandidate && ignored(repo, markdownCandidate);
   if ((isIgnored && !(allowTracked && tracked(repo, relative))) || markdownIgnored) errors.push(`${location}: path is ignored`);
   if (errors.length) return { ok: false, errors };
   return { ok: true, value: { relative, absolute }, errors: [] };

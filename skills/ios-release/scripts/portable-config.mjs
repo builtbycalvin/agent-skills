@@ -15,6 +15,7 @@ const TRANSIENT_KEYS = new Set(['currentVersion', 'lastVerifiedAt', 'readiness',
 const PRIVATE_KEY = /-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----|-----BEGIN OPENSSH PRIVATE KEY-----/;
 const CREDENTIAL_PATH = /(?:\.(?:p8|pem|key)(?:$|[\\/])|(?:^|[\\/])credentials?(?:[\\/]|$))/i;
 export const APP_KEY = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const APP_ID = /^[0-9]+$/;
 const GROUP_ID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const PATH_LINE_BREAK = /[\r\n]/;
 
@@ -82,7 +83,8 @@ function validateApp(repo, policies, key, app, errors, missing) {
   optionalString(app.displayName, `${location}.displayName`, errors);
   if (app.aliases !== undefined) { if (!Array.isArray(app.aliases)) errors.push(`${location}.aliases: expected an array`); else { const seen = new Set(); app.aliases.forEach((alias, index) => { optionalString(alias, `${location}.aliases[${index}]`, errors); if (!nonEmpty(alias)) return; const normalized = alias.toLocaleLowerCase('en-US'); if (seen.has(normalized)) errors.push(`${location}.aliases: duplicate alias`); seen.add(normalized); }); } }
   relativePath(repo, app.sourceRoot ?? '.', `${location}.sourceRoot`, errors, { requireVisible: true, existingDirectory: true });
-  for (const field of ['bundleId', 'appId']) if (!nonEmpty(app[field])) missing.push(`${location}.${field}`);
+  if (!nonEmpty(app.bundleId)) missing.push(`${location}.bundleId`);
+  if (!nonEmpty(app.appId)) missing.push(`${location}.appId`); else if (!APP_ID.test(app.appId)) errors.push(`${location}.appId: expected a decimal App Store ID`);
   if (app.platform !== 'IOS') { if (app.platform !== undefined) errors.push(`${location}.platform: expected IOS`); missing.push(`${location}.platform`); }
   if (!object(app.xcode)) { missing.push(`${location}.xcode`); } else { unknown(app.xcode, XCODE_FIELDS, `${location}.xcode`, errors); const containers = ['project', 'workspace'].filter((field) => app.xcode[field] !== undefined); if (containers.length !== 1) errors.push(`${location}.xcode: expected exactly one of project or workspace`); containers.forEach((field) => relativePath(repo, app.xcode[field], `${location}.xcode.${field}`, errors, { requireVisible: true, existingDirectory: true })); for (const field of ['scheme', 'configuration']) if (!nonEmpty(app.xcode[field])) missing.push(`${location}.xcode.${field}`); }
   if (app.testflight !== undefined) { if (!object(app.testflight)) errors.push(`${location}.testflight: expected an object`); else { unknown(app.testflight, TESTFLIGHT_FIELDS, `${location}.testflight`, errors); const ids = new Set(); for (const field of TESTFLIGHT_FIELDS) { if (app.testflight[field] === undefined) continue; if (!Array.isArray(app.testflight[field])) errors.push(`${location}.testflight.${field}: expected an array`); else app.testflight[field].forEach((group, index) => validateGroup(group, `${location}.testflight.${field}[${index}]`, errors, ids)); } } }
