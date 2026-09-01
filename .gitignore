@@ -7,5 +7,10 @@
 node_modules/
 .code-reviews/
 __pycache__/
-/.agents/
+/.agents/*
+!/.agents/skills/
+/.agents/skills/*
+!/.agents/skills/verify-agent-skills/
+!/.agents/skills/verify-agent-skills/**
+/.verification/
 /skills-lock.json

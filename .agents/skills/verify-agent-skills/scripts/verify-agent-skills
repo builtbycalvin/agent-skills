@@ -1,0 +1,354 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  printf '%s\n' \
+    'usage:' \
+    '  verify-agent-skills launch <run-id>' \
+    '  verify-agent-skills doctor <run-id>' \
+    '  verify-agent-skills drive <run-id> <feature-id> [skill-name]' \
+    '  verify-agent-skills cleanup <run-id>' >&2
+  exit 64
+}
+
+fail() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+command_name="${1:-}"
+run_id="${2:-}"
+case "$run_id" in
+  ''|*[!A-Za-z0-9._-]*) usage ;;
+esac
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || fail 'run from the agent-skills Git worktree'
+repo_root="$(cd "$repo_root" && pwd -P)"
+test -f "$repo_root/skills/ios-release/SKILL.md" || fail 'missing source skill: ios-release'
+test -f "$repo_root/.agents/skills/verify-agent-skills/SKILL.md" || fail 'missing source skill: verify-agent-skills'
+
+expected_skills() {
+  printf '%s\n' ios-release verify-agent-skills
+}
+
+skill_source_dir() {
+  if test "$1" = verify-agent-skills; then
+    printf '%s\n' "$repo_root/.agents/skills/verify-agent-skills"
+  else
+    printf '%s\n' "$repo_root/skills/$1"
+  fi
+}
+
+evidence_base="${VERIFY_AGENT_SKILLS_EVIDENCE_ROOT:-$repo_root/.verification/verify-agent-skills}"
+evidence_dir="$evidence_base/$run_id"
+state_file="$evidence_dir/state"
+
+state_value() {
+  key="$1"
+  sed -n "s/^${key}=//p" "$state_file" | tail -n 1
+}
+
+load_state() {
+  test -f "$state_file" || fail "missing run state: $state_file"
+  state_repo="$(state_value repo)"
+  scratch="$(state_value scratch)"
+  project="$(state_value project)"
+  isolated_home="$(state_value home)"
+  temp_root="$(state_value temp_root)"
+  cli_version="$(state_value cli_version)"
+  test "$state_repo" = "$repo_root" || fail 'run belongs to a different repository root'
+}
+
+record_tree() {
+  destination="$1"
+  if test -d "$project"; then
+    (
+      cd "$project"
+      printf '%s\n' 'project files:'
+      find . -path './.git' -prune -o \( -type f -o -type l \) -print | LC_ALL=C sort
+    ) > "$destination"
+  else
+    printf '%s\n' 'project missing' > "$destination"
+  fi
+}
+
+run_cli() {
+  (
+    cd "$project"
+    HOME="$isolated_home" TMPDIR="$scratch/tmp" npm_config_update_notifier=false npx --offline --yes "skills@$cli_version" "$@"
+  )
+}
+
+source_fingerprint() {
+  destination="$1"
+  python3 - "$repo_root" > "$destination" <<'PY'
+from hashlib import sha256
+import json
+import os
+from pathlib import Path
+import stat
+import subprocess
+import sys
+
+root = Path(sys.argv[1])
+
+def git_bytes(*args):
+    return subprocess.check_output(["git", "-C", str(root), *args])
+
+print(f"head={git_bytes('rev-parse', 'HEAD').decode().strip()}")
+index = git_bytes("ls-files", "--stage", "-z")
+print(f"index_sha256={sha256(index).hexdigest()}")
+paths = git_bytes("ls-files", "-z", "--cached", "--others", "--exclude-standard").split(b"\0")
+for raw_path in sorted({item for item in paths if item}):
+    relative = os.fsdecode(raw_path)
+    full = root / relative
+    if not os.path.lexists(full):
+        kind = "missing"
+        mode = "missing"
+        digest = "missing"
+    else:
+        info = full.lstat()
+        mode = f"{stat.S_IMODE(info.st_mode):04o}"
+        if stat.S_ISLNK(info.st_mode):
+            kind = "symlink"
+            digest = sha256(os.fsencode(os.readlink(full))).hexdigest()
+        elif stat.S_ISREG(info.st_mode):
+            kind = "file"
+            hasher = sha256()
+            with full.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    hasher.update(chunk)
+            digest = hasher.hexdigest()
+        else:
+            kind = "other"
+            digest = sha256(str(info.st_mode).encode()).hexdigest()
+    print(json.dumps({"path": relative, "kind": kind, "mode": mode, "sha256": digest}, sort_keys=True))
+PY
+}
+
+doctor() {
+  load_state
+  test -d "$scratch" || fail "scratch directory is missing: $scratch"
+  test -f "$scratch/owned-by-verify-agent-skills" || fail 'scratch ownership marker is missing'
+  test "$(sed -n '1p' "$scratch/owned-by-verify-agent-skills")" = "$repo_root" || fail 'scratch ownership marker does not match this repository'
+  test -d "$project/.git" || fail 'disposable project is not an initialized Git repository'
+  test -d "$isolated_home" || fail 'isolated HOME is missing'
+  actual_cli="$(run_cli --version | tail -n 1)"
+  test "$actual_cli" = "$cli_version" || fail "CLI mismatch: expected $cli_version, got $actual_cli"
+  {
+    printf 'status=healthy\n'
+    printf 'repo=%s\n' "$repo_root"
+    printf 'source_head=%s\n' "$(git -C "$repo_root" rev-parse HEAD)"
+    printf 'source_tree_status<<EOF\n'
+    git -C "$repo_root" status --short --untracked-files=all
+    printf 'EOF\n'
+    printf 'scratch=%s\n' "$scratch"
+    printf 'project=%s\n' "$project"
+    printf 'home=%s\n' "$isolated_home"
+    printf 'skills_cli=%s\n' "$cli_version"
+    printf 'node=%s\n' "$(node --version)"
+    printf 'npm=%s\n' "$(npm --version)"
+  } > "$evidence_dir/doctor.txt"
+  printf 'HEALTHY skills-cli=%s project=%s\n' "$cli_version" "$project"
+}
+
+case "$command_name" in
+  launch)
+    temp_base="${TMPDIR:-/tmp}"
+    test -d "$temp_base" || fail "temporary root is missing: $temp_base"
+    temp_root="$(cd "$temp_base" && pwd -P)"
+    mkdir -p "$evidence_base"
+    mkdir "$evidence_dir" || fail "run ID already exists: $run_id"
+    scratch="$(mktemp -d "${temp_root%/}/verify-agent-skills.${run_id}.XXXXXX")" || {
+      rmdir "$evidence_dir"
+      fail "could not allocate scratch directory under $temp_root"
+    }
+    project="$scratch/project"
+    isolated_home="$scratch/home"
+    mkdir -p "$project" "$isolated_home" "$scratch/tmp"
+    printf '%s\n' "$repo_root" > "$scratch/owned-by-verify-agent-skills"
+    printf 'repo=%s\nscratch=%s\nproject=%s\nhome=%s\ntemp_root=%s\ncli_version=unresolved\n' \
+      "$repo_root" "$scratch" "$project" "$isolated_home" "$temp_root" > "$state_file"
+    git -C "$project" init -q
+    launch_transcript="$evidence_dir/launch.txt"
+    if ! HOME="$isolated_home" TMPDIR="$scratch/tmp" npm_config_update_notifier=false npx --yes skills@latest --version > "$launch_transcript" 2>&1; then
+      fail "could not resolve skills@latest; see $launch_transcript"
+    fi
+    cli_version="$(sed -nE 's/^([0-9]+\.[0-9]+\.[0-9]+)$/\1/p' "$launch_transcript" | tail -n 1)"
+    test -n "$cli_version" || fail "could not parse skills CLI version; see $launch_transcript"
+    printf 'repo=%s\nscratch=%s\nproject=%s\nhome=%s\ntemp_root=%s\ncli_version=%s\n' \
+      "$repo_root" "$scratch" "$project" "$isolated_home" "$temp_root" "$cli_version" > "$state_file"
+    record_tree "$evidence_dir/before.txt"
+    printf 'READY skills-cli=%s project=%s evidence=%s\n' "$cli_version" "$project" "$evidence_dir"
+    ;;
+  doctor)
+    doctor
+    ;;
+  drive)
+    feature_id="${3:-}"
+    skill_name="${4:-ios-release}"
+    case "$skill_name" in
+      ios-release|verify-agent-skills) ;;
+      *) fail "unknown skill: $skill_name" ;;
+    esac
+    doctor
+    record_tree "$evidence_dir/before.txt"
+    source_fingerprint "$evidence_dir/source-before.txt"
+    case "$feature_id" in
+      discover-skills)
+        printf 'npx skills@%s add %s --list --full-depth\n' "$cli_version" "$repo_root" > "$evidence_dir/action.txt"
+        run_cli add "$repo_root" --list --full-depth > "$evidence_dir/transcript.txt" 2>&1
+        grep -q 'Found 2 skills' "$evidence_dir/transcript.txt"
+        expected_skills | while IFS= read -r expected; do
+          grep -q "$expected" "$evidence_dir/transcript.txt" || fail "discovery omitted $expected"
+          description="$(sed -n 's/^description: "\(.*\)"$/\1/p' "$(skill_source_dir "$expected")/SKILL.md" | head -n 1)"
+          test -n "$description" || fail "missing description for $expected"
+          grep -Fq "$description" "$evidence_dir/transcript.txt" || fail "discovery omitted the description for $expected"
+        done
+        test ! -e "$project/.agents/skills" || fail 'discovery unexpectedly installed a project skill'
+        ;;
+      install-selected)
+        test ! -e "$project/.agents/skills" || fail 'the selected-install recipe requires an empty project skill directory'
+        printf 'npx skills@%s add %s --agent codex --skill %s --copy --yes --full-depth\n' "$cli_version" "$repo_root" "$skill_name" > "$evidence_dir/action.txt"
+        run_cli add "$repo_root" --agent codex --skill "$skill_name" --copy --yes --full-depth > "$evidence_dir/transcript.txt" 2>&1
+        run_cli list --json > "$evidence_dir/list.json"
+        run_cli list --global --json > "$evidence_dir/global-list.json"
+        diff -qr "$(skill_source_dir "$skill_name")" "$project/.agents/skills/$skill_name" > "$evidence_dir/package-diff.txt"
+        python3 - "$evidence_dir/list.json" "$skill_name" "$project/.agents/skills/$skill_name" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+items = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+expected_name = sys.argv[2]
+expected_path = Path(sys.argv[3]).resolve()
+matches = [item for item in items if item.get("name") == expected_name]
+if len(items) != 1 or len(matches) != 1:
+    raise SystemExit(f"expected exactly one listed skill named {expected_name}, got {len(items)} total and {len(matches)} matches")
+if Path(matches[0]["path"]).resolve() != expected_path:
+    raise SystemExit("listed install path does not match the disposable project")
+if matches[0].get("scope") != "project" or matches[0].get("sourceType") != "local":
+    raise SystemExit("installation is not an isolated local project install")
+PY
+        python3 - "$evidence_dir/global-list.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+if json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")):
+    raise SystemExit("isolated HOME contains an unexpected global install")
+PY
+        ;;
+      install-all)
+        test ! -e "$project/.agents/skills" || fail 'skills are already installed in this run'
+        printf "npx skills@%s add %s --agent codex --skill '*' --copy --yes --full-depth\n" "$cli_version" "$repo_root" > "$evidence_dir/action.txt"
+        run_cli add "$repo_root" --agent codex --skill '*' --copy --yes --full-depth > "$evidence_dir/transcript.txt" 2>&1
+        run_cli list --json > "$evidence_dir/list.json"
+        run_cli list --global --json > "$evidence_dir/global-list.json"
+        expected_skills | while IFS= read -r expected; do
+          diff -qr "$(skill_source_dir "$expected")" "$project/.agents/skills/$expected" >> "$evidence_dir/package-diff.txt"
+          grep -q "\"name\": \"$expected\"" "$evidence_dir/list.json" || fail "installed list omitted $expected"
+        done
+        python3 - "$evidence_dir/list.json" "$project/.agents/skills" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+expected = {"ios-release", "verify-agent-skills"}
+items = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+install_root = Path(sys.argv[2]).resolve()
+names = {item.get("name") for item in items}
+if len(items) != 2 or names != expected:
+    raise SystemExit(f"expected exactly two installed skills, got {sorted(names)}")
+for item in items:
+    expected_path = install_root / item["name"]
+    if Path(item["path"]).resolve() != expected_path:
+        raise SystemExit(f"listed install path does not match the disposable project for {item['name']}")
+    if item.get("scope") != "project" or item.get("sourceType") != "local":
+        raise SystemExit(f"installation is not an isolated local project install for {item['name']}")
+PY
+        python3 - "$evidence_dir/global-list.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+if json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")):
+    raise SystemExit("isolated HOME contains an unexpected global install")
+PY
+        ;;
+      use-without-install)
+        printf 'npx skills@%s use %s --skill %s --full-depth\n' "$cli_version" "$repo_root" "$skill_name" > "$evidence_dir/action.txt"
+        run_cli use "$repo_root" --skill "$skill_name" --full-depth > "$evidence_dir/prompt.txt" 2> "$evidence_dir/transcript.txt"
+        grep -q 'You are being given a Skill to execute' "$evidence_dir/prompt.txt"
+        grep -q "name: $skill_name" "$evidence_dir/prompt.txt"
+        grep -q 'Supporting files for this skill were downloaded to:' "$evidence_dir/prompt.txt"
+        support_dir="$(sed -n '/Supporting files for this skill were downloaded to:/{n;p;}' "$evidence_dir/prompt.txt" | tail -n 1)"
+        test -d "$support_dir" || fail 'skills use did not leave an observable supporting-file directory'
+        test -f "$support_dir/SKILL.md" || fail 'skills use supporting directory omitted SKILL.md'
+        skills_use_root="$(cd "$support_dir/.." && pwd -P)"
+        case "$(basename "$skills_use_root")" in
+          skills-use-*) ;;
+          *) fail "unexpected skills use scratch path: $skills_use_root" ;;
+        esac
+        test "$(cd "$skills_use_root/.." && pwd -P)" = "$(cd "$scratch/tmp" && pwd -P)" || fail 'skills use supporting bundle escaped the owned scratch directory'
+        diff -qr "$(skill_source_dir "$skill_name")" "$support_dir" > "$evidence_dir/use-package-diff.txt"
+        python3 - "$evidence_dir/prompt.txt" "$(skill_source_dir "$skill_name")/SKILL.md" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+prompt = Path(sys.argv[1]).read_text(encoding="utf-8")
+source = Path(sys.argv[2]).read_text(encoding="utf-8")
+match = re.search(r"<SKILL\.md>\n(.*?)</SKILL\.md>", prompt, flags=re.DOTALL)
+if not match:
+    raise SystemExit("generated prompt omitted the SKILL.md payload")
+payload = match.group(1)
+if payload != source + "\n":
+    raise SystemExit("generated prompt SKILL.md payload differs from the selected source beyond the CLI delimiter newline")
+PY
+        test ! -e "$project/.agents/skills" || fail 'use-without-install unexpectedly installed a project skill'
+        ;;
+      *) fail "unknown feature: $feature_id" ;;
+    esac
+    record_tree "$evidence_dir/after.txt"
+    source_fingerprint "$evidence_dir/source-after.txt"
+    diff -u "$evidence_dir/source-before.txt" "$evidence_dir/source-after.txt" > "$evidence_dir/source-diff.txt"
+    {
+      printf 'status=passed\n'
+      printf 'feature=%s\n' "$feature_id"
+      printf 'skill=%s\n' "$skill_name"
+      printf 'skills_cli=%s\n' "$cli_version"
+      printf 'source=%s\n' "$repo_root"
+      printf 'project=%s\n' "$project"
+      printf 'global_install=false\n'
+    } > "$evidence_dir/proof.txt"
+    printf 'PASS feature=%s evidence=%s\n' "$feature_id" "$evidence_dir"
+    ;;
+  cleanup)
+    load_state
+    test -d "$scratch" || fail "scratch directory is already absent: $scratch"
+    test -f "$scratch/owned-by-verify-agent-skills" || fail 'refusing cleanup without ownership marker'
+    test "$(sed -n '1p' "$scratch/owned-by-verify-agent-skills")" = "$repo_root" || fail 'refusing cleanup: ownership marker mismatch'
+    python3 - "$scratch" "$repo_root" "$temp_root" <<'PY'
+from pathlib import Path
+import shutil
+import sys
+
+target = Path(sys.argv[1]).resolve()
+repo = sys.argv[2]
+temp_root = Path(sys.argv[3]).resolve()
+if target.parent != temp_root or not target.name.startswith("verify-agent-skills."):
+    raise SystemExit(f"refusing cleanup outside owned temp namespace: {target}")
+marker = target / "owned-by-verify-agent-skills"
+if marker.read_text(encoding="utf-8").splitlines()[0] != repo:
+    raise SystemExit("refusing cleanup: marker changed")
+shutil.rmtree(target)
+PY
+    printf 'scratch_deleted=true\n' >> "$state_file"
+    printf 'CLEANED scratch=%s evidence=%s\n' "$scratch" "$evidence_dir" > "$evidence_dir/cleanup.txt"
+    test ! -e "$scratch"
+    test -d "$evidence_dir"
+    printf 'CLEANED scratch=%s evidence-preserved=%s\n' "$scratch" "$evidence_dir"
+    ;;
+  *) usage ;;
+esac
