@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { createReleasePolicyBoundary } from './release-policy.mjs';
+import { parsePortableConfig } from './portable-config.mjs';
 import { duplicateJsonKeys, parseUniqueJson } from './strict-json.mjs';
 
 const ALLOWED_FRONTMATTER = new Set(['schemaVersion', 'app', 'marketingVersion', 'sourceCommit', 'sourceRange', 'sourceLocale', 'locales']);
@@ -36,6 +37,7 @@ function safeConfigPath(repo, candidate) {
 }
 function section(markdown, title) { const heading = new RegExp(`^## ${title.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\s*$`, 'm'); const match = heading.exec(markdown); if (!match) return null; const start = match.index + match[0].length; const next = markdown.slice(start).search(/^## .+$/m); return markdown.slice(start, next < 0 ? undefined : start + next).trim(); }
 function localized(content, errors, label) { const result = {}; const headings = [...content.matchAll(/^### ([^\n]+)\s*$/gm)]; const prefixEnd = headings[0]?.index ?? content.length; if (content.slice(0, prefixEnd).trim()) errors.push(`${label}: content before first locale heading`); for (let index = 0; index < headings.length; index += 1) { const locale = headings[index][1].trim(); const start = headings[index].index + headings[index][0].length; const end = index + 1 < headings.length ? headings[index + 1].index : content.length; if (Object.hasOwn(result, locale)) errors.push(`${label}: duplicate locale heading ${locale}`); result[locale] = content.slice(start, end).trim(); } return result; }
+function codePointLength(value) { return Array.from(value).length; }
 
 export function parseReleaseNote(markdown, source = '<string>') {
   const lines = String(markdown).split(/\r?\n/); const errors = []; let frontmatter = null; let frontmatterParsed = false; let body = String(markdown);
@@ -80,12 +82,26 @@ function validateGitEvidence(repo, requestedSourceCommit, frontmatter, archiveRe
 export function checkReleaseNote(input) {
   const repo = repoRoot(input.repo); let configPath = path.resolve(repo, input.config ?? '.ios-release/config.json'); const reasons = []; const version = String(input.version ?? ''); const sourceCommit = String(input.sourceCommit ?? '');
   let config; try { if (input.configValue === undefined) configPath = safeConfigPath(repo, input.config ?? '.ios-release/config.json'); config = parseUniqueJson(input.configValue ?? readFileSync(configPath, 'utf8')); } catch (error) { return result('conflict', [{ code: 'invalid-config', detail: error.message }], { path: configPath }); }
+  const checkedConfig = parsePortableConfig(config, repo);
+  const configProblems = [...checkedConfig.errors, ...checkedConfig.missing.map((item) => `${item}: missing portable configuration`)];
+  if (configProblems.length) return result('conflict', [{ code: 'invalid-config', detail: configProblems.join('; ') }], { path: configPath });
   const app = config?.apps?.[input.app]; if (!object(app)) return result('conflict', [{ code: 'unknown-app', detail: String(input.app) }], { path: configPath }); const policy = app.releaseNotes;
   const target = createReleasePolicyBoundary(repo).resolveNote(input.app, policy, version); if (!target.ok) return result('conflict', target.reasons, { path: null }); const { archivePath, archiveRelative } = target.value;
-  let markdown; try { markdown = readFileSync(archivePath, 'utf8'); } catch (error) { if (error.code === 'ENOENT') return result('missing', [{ code: 'missing-archive', detail: archiveRelative }], { path: archivePath }); return result('conflict', [{ code: 'archive-unreadable', detail: error.message }], { path: archivePath }); }
+  let descriptor;
+  let markdown;
+  try {
+    descriptor = openSync(archivePath, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
+    if (!fstatSync(descriptor).isFile()) return result('conflict', [{ code: 'archive-not-regular-file', detail: archiveRelative }], { path: archivePath });
+    markdown = readFileSync(descriptor, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return result('missing', [{ code: 'missing-archive', detail: archiveRelative }], { path: archivePath });
+    return result('conflict', [{ code: 'archive-unreadable', detail: error.message }], { path: archivePath });
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
   const parsed = parseReleaseNote(markdown, archiveRelative); reasons.push(...parsed.errors.map((detail) => ({ code: 'malformed-note', detail }))); const frontmatter = parsed.frontmatter;
   if (!object(frontmatter)) return result('conflict', reasons, { path: archivePath, parsed }); if (frontmatter.app !== input.app) addReason(reasons, 'wrong-app', `${frontmatter.app ?? '<missing>'} != ${input.app}`); if (frontmatter.marketingVersion !== version) addReason(reasons, 'wrong-version', `${frontmatter.marketingVersion ?? '<missing>'} != ${version}`); validateGitEvidence(repo, sourceCommit, frontmatter, archiveRelative, markdown, reasons);
-  const expected = target.value.locales; const actual = Array.isArray(frontmatter.locales) ? frontmatter.locales : []; if (frontmatter.sourceLocale !== target.value.sourceLocale) addReason(reasons, 'source-locale-mismatch', `${frontmatter.sourceLocale ?? '<missing>'} != ${target.value.sourceLocale}`); if (new Set(actual).size !== actual.length) addReason(reasons, 'duplicate-locale'); if (JSON.stringify(actual) !== JSON.stringify(expected)) addReason(reasons, 'locale-coverage-mismatch', `${JSON.stringify(actual)} != ${JSON.stringify(expected)}`); const appStoreLocales = Object.keys(parsed.appStore); if (JSON.stringify(appStoreLocales) !== JSON.stringify(expected)) addReason(reasons, 'app-store-section-locale-mismatch', `${JSON.stringify(appStoreLocales)} != ${JSON.stringify(expected)}`); for (const locale of expected) { const text = parsed.appStore[locale]; if (typeof text !== 'string' || text.trim().length === 0) addReason(reasons, 'missing-locale', locale); else if (text.length > 4000) addReason(reasons, 'over-limit', `${locale} is ${text.length} characters`); } const testFlightLocales = Object.keys(parsed.testFlight); if (parsed.sectionPresence.testFlight && (!testFlightLocales.length || testFlightLocales.some((locale) => !expected.includes(locale)))) addReason(reasons, 'testflight-section-locale-mismatch', `${JSON.stringify(testFlightLocales)} is not a nonempty subset of ${JSON.stringify(expected)}`); for (const locale of testFlightLocales) if (!parsed.testFlight[locale]) addReason(reasons, 'empty-testflight-text', locale); const promoLocales = Object.keys(parsed.promotionalText); if (target.value.promotionalText === 'preserve' && parsed.sectionPresence.promotionalText) addReason(reasons, 'promotional-text-forbidden-by-policy'); if (target.value.promotionalText === 'suggest' && parsed.sectionPresence.promotionalText && JSON.stringify(promoLocales) !== JSON.stringify(expected)) addReason(reasons, 'promotional-text-locale-mismatch', `${JSON.stringify(promoLocales)} != ${JSON.stringify(expected)}`); for (const locale of promoLocales) { const text = parsed.promotionalText[locale]; if (!text) addReason(reasons, 'empty-promotional-text', locale); else if (text.length > 170) addReason(reasons, 'promotional-text-over-limit', `${locale} is ${text.length} characters`); }
+  const expected = target.value.locales; const actual = Array.isArray(frontmatter.locales) ? frontmatter.locales : []; if (frontmatter.sourceLocale !== target.value.sourceLocale) addReason(reasons, 'source-locale-mismatch', `${frontmatter.sourceLocale ?? '<missing>'} != ${target.value.sourceLocale}`); if (new Set(actual).size !== actual.length) addReason(reasons, 'duplicate-locale'); if (JSON.stringify(actual) !== JSON.stringify(expected)) addReason(reasons, 'locale-coverage-mismatch', `${JSON.stringify(actual)} != ${JSON.stringify(expected)}`); const appStoreLocales = Object.keys(parsed.appStore); if (JSON.stringify(appStoreLocales) !== JSON.stringify(expected)) addReason(reasons, 'app-store-section-locale-mismatch', `${JSON.stringify(appStoreLocales)} != ${JSON.stringify(expected)}`); for (const locale of expected) { const text = parsed.appStore[locale]; if (typeof text !== 'string' || text.trim().length === 0) addReason(reasons, 'missing-locale', locale); else { const length = codePointLength(text); if (length > 4000) addReason(reasons, 'over-limit', `${locale} is ${length} characters`); } } const testFlightLocales = Object.keys(parsed.testFlight); if (parsed.sectionPresence.testFlight && (!testFlightLocales.length || testFlightLocales.some((locale) => !expected.includes(locale)))) addReason(reasons, 'testflight-section-locale-mismatch', `${JSON.stringify(testFlightLocales)} is not a nonempty subset of ${JSON.stringify(expected)}`); for (const locale of testFlightLocales) if (!parsed.testFlight[locale]) addReason(reasons, 'empty-testflight-text', locale); const promoLocales = Object.keys(parsed.promotionalText); if (target.value.promotionalText === 'preserve' && parsed.sectionPresence.promotionalText) addReason(reasons, 'promotional-text-forbidden-by-policy'); if (target.value.promotionalText === 'suggest' && parsed.sectionPresence.promotionalText && JSON.stringify(promoLocales) !== JSON.stringify(expected)) addReason(reasons, 'promotional-text-locale-mismatch', `${JSON.stringify(promoLocales)} != ${JSON.stringify(expected)}`); for (const locale of promoLocales) { const text = parsed.promotionalText[locale]; if (!text) addReason(reasons, 'empty-promotional-text', locale); else { const length = codePointLength(text); if (length > 170) addReason(reasons, 'promotional-text-over-limit', `${locale} is ${length} characters`); } }
   if (reasons.length) return result('conflict', reasons, { path: archivePath, parsed }); return result('valid', [], { path: archivePath, archiveRelative, parsed });
 }
 

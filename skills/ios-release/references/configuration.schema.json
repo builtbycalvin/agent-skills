@@ -11,6 +11,7 @@
     "apps": {
       "type": "object",
       "minProperties": 0,
+      "propertyNames": { "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
       "additionalProperties": { "$ref": "#/$defs/app" }
     }
   },
