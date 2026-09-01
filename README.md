@@ -2,6 +2,20 @@
 
 Reusable coding-agent workflows by [Calvin](https://github.com/builtbycalvin).
 
+## iOS Release
+
+[ios-release](skills/ios-release/SKILL.md) configures, inspects, prepares, and
+releases iOS apps through one entry point. It keeps portable policy in tracked
+`.ios-release/config.json`, keeps the ASC profile binding in ignored
+`.ios-release/local.json`, resolves the app and version, and maintains one
+reviewable release-note archive for App Store and optional TestFlight copy.
+
+It never stores credentials or standing release authority. Exact release
+requests authorize only their stated TestFlight or App Store lane. When the
+canonical workflow changes tracked release state, the skill commits the exact
+generated state and reconciles that commit with the verified upstream. Git
+tags, tag pushes, and GitHub releases remain separate effects.
+
 ## Local Review Until Clean
 
 [local-review-until-clean](skills/local-review-until-clean/SKILL.md) reviews and
@@ -34,6 +48,8 @@ runs Poteto's independent Shipping verification before it arms merge-when-ready.
   including Poteto Mode, Interrogate, their playbooks, and supporting skills.
 - Graphite CLI with current branch tracking for merge or auto-merge requests.
   Reaching merge-ready does not require Graphite.
+- App Store Connect CLI and the `rorkai/app-store-connect-cli-skills` skill pack
+  for `ios-release` setup, TestFlight, and App Store work.
 - A matching installed live-control skill, the real control surface, isolated
   reviewer worktrees, and authority for Shipping's required verdict posts when
   merging.
@@ -61,6 +77,24 @@ npx skills@latest add builtbycalvin/agent-skills -g
 ```
 
 ## Use
+
+Configure an iOS app repository for releases:
+
+```text
+$ios-release configure this repository for releases.
+```
+
+Release the configured app to an exact destination:
+
+```text
+$ios-release release this app to the internal TestFlight group.
+```
+
+`ios-release` recommends a marketing version when one is not supplied and asks
+for confirmation before changing it. App Store staging and submission require
+approved release notes for updates; TestFlight does not. It uses installed ASC
+skills for current CLI mechanics and does not persist credentials or release
+authority.
 
 Review and fix local changes until clean:
 

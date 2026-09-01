@@ -5,6 +5,7 @@
 *.pem
 *.key
 node_modules/
+.code-reviews/
 __pycache__/
 /.agents/
 /skills-lock.json
