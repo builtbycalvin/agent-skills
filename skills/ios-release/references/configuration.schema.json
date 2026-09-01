@@ -16,7 +16,7 @@
     }
   },
   "$defs": {
-    "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])[^\\r\\n]*$" },
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?![\\\\/])(?![A-Za-z]:[\\\\/])[^\\r\\n]*$" },
     "locale": { "type": "string", "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$" },
     "group": {
       "type": "object", "additionalProperties": false, "required": ["id", "name"],

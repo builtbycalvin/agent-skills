@@ -69,7 +69,7 @@ function resolveRepositoryPath(repo, metadataDirectories, value, location, allow
       if (info.isSymbolicLink()) { errors.push(`${location}: symlinks are forbidden`); break; }
       if (!inside(canonicalRepo, realpathSync.native(current))) { errors.push(`${location}: path escapes the repository`); break; }
       if (info.isDirectory()) {
-        try { if (realpathSync.native(repoRoot(current)) !== canonicalRepo) { errors.push(`${location}: path is inside another Git repository`); break; } } catch { /* A normal untracked directory may not be a Git worktree. */ }
+        try { if (realpathSync.native(repoRoot(current)) !== canonicalRepo) { errors.push(`${location}: path is inside another Git repository`); break; } } catch { try { if (runGit(current, ['rev-parse', '--is-bare-repository']) === 'true') { errors.push(`${location}: path is a bare Git repository`); break; } } catch { /* A normal untracked directory may not be a Git repository. */ } }
       }
     } catch (error) {
       if (error.code === 'ENOENT') break;
