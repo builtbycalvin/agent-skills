@@ -9,7 +9,7 @@ Own the request from repository setup through exact remote readback. Infer the a
 
 Keep portable policy in tracked-candidate `.ios-release/config.json` and the machine's ASC profile binding in ignored `.ios-release/local.json`. Never store credentials, current versions or builds, readiness, approvals, observations, or standing release authority in either file.
 
-Resolve required leaf skills before changing the repository or App Store Connect. Do not hardcode skill installation paths or install missing skills. Return `blocked` with the missing skill names and installation guidance. Use `asc-cli-usage` for current commands and flags, and run the relevant `--help` before relying on a command shape.
+Resolve required leaf skills before changing the repository or App Store Connect. Do not hardcode skill installation paths or install missing skills. Return `blocked` with the missing skill names and installation guidance. Use `asc-cli-usage` for current commands and flags. Check the relevant `--help` even when a leaf skill supplies an example; reconcile stale examples with current help. Return `blocked` if the required operation cannot be resolved. Request `--output json` when parsing command results.
 
 ## Classify authority
 
@@ -41,7 +41,7 @@ Read [configuration.md](references/configuration.md).
 2. Run `node scripts/config.mjs init --repo <root>`. For V1, run migration in plan mode first. The helper creates the strict tracked and local split without overwriting existing files.
 3. Discover shipping apps, bundle IDs, App Store IDs, source roots, Xcode containers, schemes, release configurations, TestFlight groups, metadata paths, locales, tone, and existing note archives.
 4. Propose the portable configuration. During initial setup, select a repository-visible archive location using this order: documented convention, one existing safe archive, `release-notes/ios/<app-key>` for a multi-app repository, then `release-notes` for a single app. Ask only if multiple valid locations remain.
-5. Inspect `asc auth status --output json` without printing credential material. Never switch the active profile. Put only the chosen profile name in `local.json`, and pass it explicitly to every app-scoped command.
+5. Inspect `asc auth status --output json` without printing credential material. Never switch the active profile. Put only the chosen profile name in `local.json`, and pass it as the global `--profile <name>` on every app-scoped command.
 6. Resolve app IDs through `asc-id-resolver`. Resolve groups only when setup or the selected lane needs them. Preserve configured identity and report a conflict when fresh evidence disagrees.
 7. Run `node scripts/config.mjs doctor --repo <root> [--app <key>]`. Resolve evidence-backed missing values and present user choices for the rest.
 
@@ -104,7 +104,9 @@ Load only the leaf skills needed for changing mechanics:
 
 Do not copy their command recipes here and do not use `asc-workflow` by default. Preserve this skill's narrower effect boundary when a leaf supports broader operations.
 
-Use exact IDs after resolution. Never rediscover an uploaded build through an unqualified latest query. After every remote write, read back the exact app, build, version, group, localization, or submission. A successful exit or dry run is not proof.
+Use the command's resource-specific selector after resolution: `--build-id` for builds, `--version-id` for versions, and `--id` for `apps view`. For app-scoped build-number lookup, pass the configured `--platform` and marketing version, then retain the returned build ID. Never rediscover an uploaded build through an unqualified latest query. After every remote write, read back the exact app, build, version, group, localization, or submission. A successful exit or dry run is not proof.
+
+For signing fetch or sync push with `--device`, use `--create-missing` only when creating missing provisioning profiles is authorized. Route signing sync secrets through the signing skill's supported secret input; keep them out of release configuration.
 
 If a write times out or returns malformed output, mark the effect `remote-unknown` and inspect live state before retrying. Never repeat an upload while that version and build outcome remains unknown. Continue from observed state and report `partial` when remote and repository outcomes differ.
 
