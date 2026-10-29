@@ -25,7 +25,7 @@ Read the repository's release policy and canonical generator. Resolve the exact 
 
 After changing the version or build:
 
-1. Run the canonical generator.
+1. Run the canonical generator, including a configured `xcode.generator`.
 2. Reject tracked changes outside the allowed release-state paths.
 3. Stage the complete changed path set.
 4. Run the repository's drift check.

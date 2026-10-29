@@ -24,7 +24,7 @@
     },
     "xcode": {
       "type": "object", "additionalProperties": false, "required": ["scheme", "configuration"],
-      "properties": { "project": { "$ref": "#/$defs/path" }, "workspace": { "$ref": "#/$defs/path" }, "scheme": { "type": "string", "minLength": 1 }, "configuration": { "type": "string", "minLength": 1 } },
+      "properties": { "project": { "$ref": "#/$defs/path" }, "workspace": { "$ref": "#/$defs/path" }, "scheme": { "type": "string", "minLength": 1 }, "configuration": { "type": "string", "minLength": 1 }, "generator": { "type": "object", "additionalProperties": false, "required": ["tool", "spec"], "properties": { "tool": { "const": "xcodegen" }, "spec": { "$ref": "#/$defs/path" } } } },
       "oneOf": [{ "required": ["project"], "not": { "required": ["workspace"] } }, { "required": ["workspace"], "not": { "required": ["project"] } }]
     },
     "releaseNotes": {

@@ -16,7 +16,8 @@ The tracked candidate is `.ios-release/config.json`. The ignored local file is
 
 `config.json` uses schema version 2 and contains `defaultApp`, an `apps` map,
 portable bundle and App Store IDs, source roots, Xcode project or workspace,
-scheme, configuration, TestFlight group selectors, `metadataDirectory`,
+scheme, configuration, an optional Xcode `generator`, TestFlight group
+selectors, `metadataDirectory`,
 `releaseNotes`, and an optional `defaultIntent`. `releaseNotes` requires a
 repository-relative `archiveDirectory`, `sourceLocale`, non-empty unique
 `locales` including that source locale, and `promotionalText` set to `preserve`
@@ -53,7 +54,12 @@ archive paths must be visible to the parent repository; ignored paths, symlinks,
 submodules, and nested Git repositories are invalid because their contents are
 not owned by the synchronized parent commit. App keys, display
 names, and aliases are case-insensitive selectors and must not collide. Each
-configured app must have a unique App Store ID. Group IDs and names must be
+configured app must have a unique App Store ID.
+
+A project or workspace generated from a tracked spec may stay ignored when
+`xcode.generator` names the tool and spec, for example
+`{ "tool": "xcodegen", "spec": "project.yml" }`. The spec must be a tracked file
+inside the repository. Do not commit generated Xcode output to satisfy doctor. Group IDs and names must be
 explicit selectors. Resolve live identity through the owning ASC skills before
 every remote effect.
 

@@ -6,7 +6,9 @@ import { createReleasePolicyBoundary } from './release-policy.mjs';
 const DIRECTORY = '.ios-release';
 const ROOT_FIELDS = new Set(['schemaVersion', 'defaultApp', 'apps']);
 const APP_FIELDS = new Set(['displayName', 'aliases', 'sourceRoot', 'bundleId', 'appId', 'platform', 'xcode', 'testflight', 'metadataDirectory', 'releaseNotes', 'defaultIntent']);
-const XCODE_FIELDS = new Set(['project', 'workspace', 'scheme', 'configuration']);
+const XCODE_FIELDS = new Set(['project', 'workspace', 'scheme', 'configuration', 'generator']);
+const GENERATOR_FIELDS = new Set(['tool', 'spec']);
+const GENERATOR_TOOLS = new Set(['xcodegen']);
 const TESTFLIGHT_FIELDS = new Set(['internalGroups', 'externalGroups']);
 const GROUP_FIELDS = new Set(['id', 'name']);
 const INTENTS = new Set(['internal-testflight', 'external-testflight', 'app-store-stage', 'app-store-submit']);
@@ -26,6 +28,7 @@ function repoRoot(candidate) { return path.resolve(runGit(path.resolve(candidate
 function inside(root, candidate) { const relative = path.relative(root, candidate); return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); }
 function indexEntries(repo, relative) { return execFileSync('git', ['-C', repo, 'ls-files', '--stage', '-z', '--', relative], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).split('\0').filter(Boolean).map((record) => { const match = /^(\d{6}) ([0-9a-f]+) ([0-3])\t([\s\S]+)$/.exec(record); if (!match) throw new Error('Git index returned an invalid entry'); return { mode: match[1], path: match[4] }; }); }
 function gitlink(repo, relative) { return indexEntries(repo, relative).some((entry) => entry.mode === '160000' && entry.path === relative); }
+function trackedFile(repo, relative) { return indexEntries(repo, relative).some((entry) => entry.path === relative && entry.mode !== '160000') && lstatSync(path.join(repo, relative), { throwIfNoEntry: false })?.isFile() === true; }
 function ignored(repo, target) { try { runGit(repo, ['check-ignore', '--quiet', '--no-index', '--', target]); return true; } catch { return false; } }
 function validateRepositoryPath(repo, resolved, location, errors) {
   const canonicalRepo = realpathSync.native(repo);
@@ -76,6 +79,16 @@ function validateGroup(group, location, errors, ids) {
   const normalizedId = nonEmpty(group.id) ? group.id.toLocaleLowerCase('en-US') : null;
   if (normalizedId && ids.has(normalizedId)) errors.push(`${location}.id: duplicate group ID`); else if (normalizedId) ids.add(normalizedId);
 }
+function validateGenerator(repo, generator, location, errors) {
+  if (generator === undefined) return false;
+  if (!object(generator)) { errors.push(`${location}: expected an object`); return false; }
+  unknown(generator, GENERATOR_FIELDS, location, errors);
+  if (!GENERATOR_TOOLS.has(generator.tool)) errors.push(`${location}.tool: expected xcodegen`);
+  const errorCount = errors.length;
+  const resolved = relativePath(repo, generator.spec, `${location}.spec`, errors, { requireVisible: true });
+  if (resolved && errors.length === errorCount && !trackedFile(repo, path.relative(repo, resolved).split(path.sep).join('/'))) errors.push(`${location}.spec: generator spec must be tracked by Git`);
+  return true;
+}
 function validateApp(repo, policies, key, app, errors, missing) {
   const location = `apps.${key}`;
   if (!object(app)) { errors.push(`${location}: expected an object`); return null; }
@@ -86,7 +99,7 @@ function validateApp(repo, policies, key, app, errors, missing) {
   if (!nonEmpty(app.bundleId)) missing.push(`${location}.bundleId`);
   if (!nonEmpty(app.appId)) missing.push(`${location}.appId`); else if (!APP_ID.test(app.appId)) errors.push(`${location}.appId: expected a decimal App Store ID`);
   if (app.platform !== 'IOS') { if (app.platform !== undefined) errors.push(`${location}.platform: expected IOS`); missing.push(`${location}.platform`); }
-  if (!object(app.xcode)) { missing.push(`${location}.xcode`); } else { unknown(app.xcode, XCODE_FIELDS, `${location}.xcode`, errors); const containers = ['project', 'workspace'].filter((field) => app.xcode[field] !== undefined); if (containers.length !== 1) errors.push(`${location}.xcode: expected exactly one of project or workspace`); containers.forEach((field) => relativePath(repo, app.xcode[field], `${location}.xcode.${field}`, errors, { requireVisible: true, existingDirectory: true })); for (const field of ['scheme', 'configuration']) if (!nonEmpty(app.xcode[field])) missing.push(`${location}.xcode.${field}`); }
+  if (!object(app.xcode)) { missing.push(`${location}.xcode`); } else { unknown(app.xcode, XCODE_FIELDS, `${location}.xcode`, errors); const containers = ['project', 'workspace'].filter((field) => app.xcode[field] !== undefined); if (containers.length !== 1) errors.push(`${location}.xcode: expected exactly one of project or workspace`); const generated = validateGenerator(repo, app.xcode.generator, `${location}.xcode.generator`, errors); containers.forEach((field) => relativePath(repo, app.xcode[field], `${location}.xcode.${field}`, errors, { requireVisible: !generated, existingDirectory: true })); for (const field of ['scheme', 'configuration']) if (!nonEmpty(app.xcode[field])) missing.push(`${location}.xcode.${field}`); }
   if (app.testflight !== undefined) { if (!object(app.testflight)) errors.push(`${location}.testflight: expected an object`); else { unknown(app.testflight, TESTFLIGHT_FIELDS, `${location}.testflight`, errors); const ids = new Set(); for (const field of TESTFLIGHT_FIELDS) { if (app.testflight[field] === undefined) continue; if (!Array.isArray(app.testflight[field])) errors.push(`${location}.testflight.${field}: expected an array`); else app.testflight[field].forEach((group, index) => validateGroup(group, `${location}.testflight.${field}[${index}]`, errors, ids)); } } }
   if (app.metadataDirectory !== undefined) relativePath(repo, app.metadataDirectory, `${location}.metadataDirectory`, errors, { rejectLocal: true, requireVisible: true, existingDirectory: true });
   const releaseNotes = policies.validateConfigured(key, app.releaseNotes); errors.push(...releaseNotes.errors); missing.push(...releaseNotes.missing);

@@ -39,7 +39,7 @@ Read [configuration.md](references/configuration.md).
 
 1. Resolve the Git root. Read repository instructions, canonical project files, generators, and release documentation before generated Xcode output.
 2. Run `node scripts/config.mjs init --repo <root>`. For V1, run migration in plan mode first. The helper creates the strict tracked and local split without overwriting existing files.
-3. Discover shipping apps, bundle IDs, App Store IDs, source roots, Xcode containers, schemes, release configurations, TestFlight groups, metadata paths, locales, tone, and existing note archives.
+3. Discover shipping apps, bundle IDs, App Store IDs, source roots, Xcode containers and any project generator, schemes, release configurations, TestFlight groups, metadata paths, locales, tone, and existing note archives.
 4. Propose the portable configuration. During initial setup, select a repository-visible archive location using this order: documented convention, one existing safe archive, `release-notes/ios/<app-key>` for a multi-app repository, then `release-notes` for a single app. Ask only if multiple valid locations remain.
 5. Inspect `asc auth status --output json` without printing credential material. Never switch the active profile. Put only the chosen profile name in `local.json`, and pass it as the global `--profile <name>` on every app-scoped command.
 6. Resolve app IDs through `asc-id-resolver`. Resolve groups only when setup or the selected lane needs them. Preserve configured identity and report a conflict when fresh evidence disagrees.
@@ -85,6 +85,8 @@ Routine releases change only `whatsNew`. If `promotionalText` is `suggest`, draf
 ## Build and execute
 
 For lanes that can change tracked state, read [repository.md](references/repository.md). State repository and upstream state, `sourceCommit`, app identity, profile, Xcode container, scheme, configuration, marketing version, build provenance, archive path and note status, destination, allowed effects, excluded effects, required checks, and planned readbacks.
+
+When `xcode.generator` is configured, run that generator from the synchronized commit before every build, archive, or export, then confirm the configured container exists. Treat the regenerated container as the canonical generator output, not as a tracked release-state path.
 
 Load only the leaf skills needed for changing mechanics:
 
