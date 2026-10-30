@@ -84,9 +84,11 @@ Routine releases change only `whatsNew`. If `promotionalText` is `suggest`, draf
 
 ## Build and execute
 
-For lanes that can change tracked state, read [repository.md](references/repository.md). State repository and upstream state, `sourceCommit`, app identity, profile, Xcode container, scheme, configuration, marketing version, build provenance, archive path and note status, destination, allowed effects, excluded effects, required checks, and planned readbacks.
+For lanes that can change tracked state, read [repository.md](references/repository.md). State repository and upstream state, `sourceCommit`, app identity, profile, Xcode container, scheme, configuration, marketing version, build provenance, archive path and note status, configured post-archive hooks, destination, allowed effects, excluded effects, required checks, and planned readbacks.
 
 When `xcode.generator` is configured, run that generator from the synchronized commit before every build, archive, or export, then confirm the configured container exists. Treat the regenerated container as the canonical generator output, not as a tracked release-state path.
+
+When `xcode.postArchive` is configured, run each hook in order after every successful archive and before export or upload. Run it from the repository root as `<hook> <absolute .xcarchive path>` and record its exit status. Never run hooks for a dry run, a failed archive, or a reused artifact this run did not archive. A hook does not widen the allowed effects. If a hook fails, stop before any upload and return `blocked`, or `partial` when an earlier repository or remote effect already happened. Report each hook's path and outcome in the final status.
 
 Load only the leaf skills needed for changing mechanics:
 
@@ -112,4 +114,4 @@ For signing fetch or sync push with `--device`, use `--create-missing` only when
 
 If a write times out or returns malformed output, mark the effect `remote-unknown` and inspect live state before retrying. Never repeat an upload while that version and build outcome remains unknown. Continue from observed state and report `partial` when remote and repository outcomes differ.
 
-Return `completed`, `partial`, `blocked`, or `configured`. Include exact versions, commits, remote IDs, readback, remaining uncertainty, and one safe next action. Never describe a partial release as successful or widen authority to repair an adjacent problem.
+Return `completed`, `partial`, `blocked`, or `configured`. Include exact versions, commits, remote IDs, post-archive hook outcomes, readback, remaining uncertainty, and one safe next action. Never describe a partial release as successful or widen authority to repair an adjacent problem.

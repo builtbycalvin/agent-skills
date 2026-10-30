@@ -16,7 +16,8 @@ The tracked candidate is `.ios-release/config.json`. The ignored local file is
 
 `config.json` uses schema version 2 and contains `defaultApp`, an `apps` map,
 portable bundle and App Store IDs, source roots, Xcode project or workspace,
-scheme, configuration, an optional Xcode `generator`, TestFlight group
+scheme, configuration, an optional Xcode `generator`, optional `postArchive`
+hooks, TestFlight group
 selectors, `metadataDirectory`,
 `releaseNotes`, and an optional `defaultIntent`. `releaseNotes` requires a
 repository-relative `archiveDirectory`, `sourceLocale`, non-empty unique
@@ -59,7 +60,15 @@ configured app must have a unique App Store ID.
 A project or workspace generated from a tracked spec may stay ignored when
 `xcode.generator` names the tool and spec, for example
 `{ "tool": "xcodegen", "spec": "project.yml" }`. The spec must be a tracked file
-inside the repository. Do not commit generated Xcode output to satisfy doctor. Group IDs and names must be
+inside the repository. Do not commit generated Xcode output to satisfy doctor.
+
+`xcode.postArchive` lists repository-relative scripts to run after each
+successful archive, for example `["scripts/upload-dsyms.sh"]`. Each entry must
+be a unique, executable file tracked by Git inside the repository and outside
+`.ios-release`. The release run calls each hook from the repository root with
+the absolute `.xcarchive` path as its only argument. Hooks are repository
+mechanics, not release authority, and must not read credentials from either
+configuration file. Group IDs and names must be
 explicit selectors. Resolve live identity through the owning ASC skills before
 every remote effect.
 

@@ -1,12 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { lstatSync, realpathSync } from 'node:fs';
+import { constants, lstatSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { createReleasePolicyBoundary } from './release-policy.mjs';
 
 const DIRECTORY = '.ios-release';
 const ROOT_FIELDS = new Set(['schemaVersion', 'defaultApp', 'apps']);
 const APP_FIELDS = new Set(['displayName', 'aliases', 'sourceRoot', 'bundleId', 'appId', 'platform', 'xcode', 'testflight', 'metadataDirectory', 'releaseNotes', 'defaultIntent']);
-const XCODE_FIELDS = new Set(['project', 'workspace', 'scheme', 'configuration', 'generator']);
+const XCODE_FIELDS = new Set(['project', 'workspace', 'scheme', 'configuration', 'generator', 'postArchive']);
 const GENERATOR_FIELDS = new Set(['tool', 'spec']);
 const GENERATOR_TOOLS = new Set(['xcodegen']);
 const TESTFLIGHT_FIELDS = new Set(['internalGroups', 'externalGroups']);
@@ -89,6 +89,23 @@ function validateGenerator(repo, generator, location, errors) {
   if (resolved && errors.length === errorCount && !trackedFile(repo, path.relative(repo, resolved).split(path.sep).join('/'))) errors.push(`${location}.spec: generator spec must be tracked by Git`);
   return true;
 }
+function validatePostArchive(repo, hooks, location, errors) {
+  if (hooks === undefined) return;
+  if (!Array.isArray(hooks)) { errors.push(`${location}: expected an array`); return; }
+  const seen = new Set();
+  hooks.forEach((hook, index) => {
+    const hookLocation = `${location}[${index}]`;
+    const errorCount = errors.length;
+    const resolved = relativePath(repo, hook, hookLocation, errors, { rejectLocal: true, requireVisible: true });
+    if (!resolved || errors.length !== errorCount) return;
+    const relative = path.relative(repo, resolved).split(path.sep).join('/');
+    if (seen.has(relative)) { errors.push(`${hookLocation}: duplicate hook`); return; }
+    seen.add(relative);
+    if (!lstatSync(resolved, { throwIfNoEntry: false })) { errors.push(`${hookLocation}: hook does not exist`); return; }
+    if (!trackedFile(repo, relative)) { errors.push(`${hookLocation}: hook must be a file tracked by Git`); return; }
+    if ((lstatSync(resolved).mode & constants.S_IXUSR) === 0) errors.push(`${hookLocation}: hook must be executable`);
+  });
+}
 function validateApp(repo, policies, key, app, errors, missing) {
   const location = `apps.${key}`;
   if (!object(app)) { errors.push(`${location}: expected an object`); return null; }
@@ -99,7 +116,7 @@ function validateApp(repo, policies, key, app, errors, missing) {
   if (!nonEmpty(app.bundleId)) missing.push(`${location}.bundleId`);
   if (!nonEmpty(app.appId)) missing.push(`${location}.appId`); else if (!APP_ID.test(app.appId)) errors.push(`${location}.appId: expected a decimal App Store ID`);
   if (app.platform !== 'IOS') { if (app.platform !== undefined) errors.push(`${location}.platform: expected IOS`); missing.push(`${location}.platform`); }
-  if (!object(app.xcode)) { missing.push(`${location}.xcode`); } else { unknown(app.xcode, XCODE_FIELDS, `${location}.xcode`, errors); const containers = ['project', 'workspace'].filter((field) => app.xcode[field] !== undefined); if (containers.length !== 1) errors.push(`${location}.xcode: expected exactly one of project or workspace`); const generated = validateGenerator(repo, app.xcode.generator, `${location}.xcode.generator`, errors); containers.forEach((field) => relativePath(repo, app.xcode[field], `${location}.xcode.${field}`, errors, { requireVisible: !generated, existingDirectory: true })); for (const field of ['scheme', 'configuration']) if (!nonEmpty(app.xcode[field])) missing.push(`${location}.xcode.${field}`); }
+  if (!object(app.xcode)) { missing.push(`${location}.xcode`); } else { unknown(app.xcode, XCODE_FIELDS, `${location}.xcode`, errors); const containers = ['project', 'workspace'].filter((field) => app.xcode[field] !== undefined); if (containers.length !== 1) errors.push(`${location}.xcode: expected exactly one of project or workspace`); const generated = validateGenerator(repo, app.xcode.generator, `${location}.xcode.generator`, errors); containers.forEach((field) => relativePath(repo, app.xcode[field], `${location}.xcode.${field}`, errors, { requireVisible: !generated, existingDirectory: true })); validatePostArchive(repo, app.xcode.postArchive, `${location}.xcode.postArchive`, errors); for (const field of ['scheme', 'configuration']) if (!nonEmpty(app.xcode[field])) missing.push(`${location}.xcode.${field}`); }
   if (app.testflight !== undefined) { if (!object(app.testflight)) errors.push(`${location}.testflight: expected an object`); else { unknown(app.testflight, TESTFLIGHT_FIELDS, `${location}.testflight`, errors); const ids = new Set(); for (const field of TESTFLIGHT_FIELDS) { if (app.testflight[field] === undefined) continue; if (!Array.isArray(app.testflight[field])) errors.push(`${location}.testflight.${field}: expected an array`); else app.testflight[field].forEach((group, index) => validateGroup(group, `${location}.testflight.${field}[${index}]`, errors, ids)); } } }
   if (app.metadataDirectory !== undefined) relativePath(repo, app.metadataDirectory, `${location}.metadataDirectory`, errors, { rejectLocal: true, requireVisible: true, existingDirectory: true });
   const releaseNotes = policies.validateConfigured(key, app.releaseNotes); errors.push(...releaseNotes.errors); missing.push(...releaseNotes.missing);
