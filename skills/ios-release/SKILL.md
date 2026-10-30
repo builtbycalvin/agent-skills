@@ -84,7 +84,7 @@ Routine releases change only `whatsNew`. If `promotionalText` is `suggest`, draf
 
 ## Build and execute
 
-For lanes that can change tracked state, read [repository.md](references/repository.md). State repository and upstream state, `sourceCommit`, app identity, profile, Xcode container, scheme, configuration, marketing version, build provenance, archive path and note status, destination, allowed effects, excluded effects, required checks, and planned readbacks.
+For lanes that can change tracked state, read [repository.md](references/repository.md). State repository and upstream state, `sourceCommit`, app identity, profile, Xcode container, scheme, configuration, marketing version, build provenance, archive path and note status, configured post-archive hooks, destination, allowed effects, excluded effects, required checks, and planned readbacks.
 
 When `xcode.generator` is configured, run that generator from the synchronized commit before every build, archive, or export, then confirm the configured container exists. Treat the regenerated container as the canonical generator output, not as a tracked release-state path.
 

@@ -101,6 +101,7 @@ function validatePostArchive(repo, hooks, location, errors) {
     const relative = path.relative(repo, resolved).split(path.sep).join('/');
     if (seen.has(relative)) { errors.push(`${hookLocation}: duplicate hook`); return; }
     seen.add(relative);
+    if (!lstatSync(resolved, { throwIfNoEntry: false })) { errors.push(`${hookLocation}: hook does not exist`); return; }
     if (!trackedFile(repo, relative)) { errors.push(`${hookLocation}: hook must be a file tracked by Git`); return; }
     if ((lstatSync(resolved).mode & constants.S_IXUSR) === 0) errors.push(`${hookLocation}: hook must be executable`);
   });
