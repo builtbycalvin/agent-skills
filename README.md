@@ -16,6 +16,27 @@ canonical workflow changes tracked release state, the skill commits the exact
 generated state and reconciles that commit with the verified upstream. Git
 tags, tag pushes, and GitHub releases remain separate effects.
 
+## App Store Assets
+
+[app-store-assets](skills/app-store-assets/SKILL.md) configures and coordinates
+app-agnostic screenshots, app preview videos, product page headers, and search
+creative assets. It reuses installed ASC skills for capture, validation, upload,
+and placement mechanics. Portable asset policy stays separate from ignored
+machine bindings and run state. A local bundle helper detects changes after review.
+
+The skill includes offline `init` and `doctor` commands for consistent repository
+setup and validation. Run them from the skill directory with `--repo` pointing to
+the app repository. See the [configuration contract](skills/app-store-assets/references/configuration.md).
+
+```text
+$app-store-assets configure this repository for App Store asset production.
+$app-store-assets prepare a local screenshot and header bundle for review.
+```
+
+Routine `ios-release` runs preserve assets. Asset upload, assignment, review, and
+publication require their stated scope. The skill documents browser/manual
+fallbacks and does not claim that an upload proves storefront publication.
+
 ## Prerequisites
 
 - Node.js 22.20.0 or newer and npm for `npx` and the local helpers.

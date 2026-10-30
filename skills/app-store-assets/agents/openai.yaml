@@ -1,0 +1,8 @@
+interface:
+  display_name: "App Store Assets"
+  short_description: "Create and review reusable App Store asset bundles"
+  default_prompt: "Use $app-store-assets to configure or prepare this app's screenshots, previews, header, and search creative assets within the requested authority."
+policy:
+  products:
+    - CODEX
+  allow_implicit_invocation: true
