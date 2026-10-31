@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -106,12 +107,12 @@ test('compare with a stricter z threshold suppresses weaker findings', t => {
   assert.equal(strict.code, 0);
 });
 
-function fakeAsc(t, { includeInstances = true } = {}) {
+function fakeAsc(t, { includeInstances = true, files = { s1: fx('engagement-before.tsv'), s2: fx('engagement-after.csv'), s3: fx('downloads-before.tsv'), s4: fx('downloads-after.csv.gz') } } = {}) {
   const dir = scratch(t);
   const log = path.join(dir, 'calls.log');
-  const files = { s1: fx('engagement-before.tsv'), s2: fx('engagement-after.csv'), s3: fx('downloads-before.tsv'), s4: fx('downloads-after.csv.gz') };
+  const md5 = id => (files[id] ? createHash('md5').update(readFileSync(files[id])).digest('hex') : '0');
   // Mirrors real `asc analytics view --include-segments` output (asc 5.17.1).
-  const instance = (id, processingDate, segment) => ({ id, processingDate, granularity: 'DAILY', segments: [{ id: segment, downloadUrl: 'https://example.invalid', checksum: '0', sizeInBytes: 1 }] });
+  const instance = (id, processingDate, segment) => ({ id, processingDate, granularity: 'DAILY', segments: [{ id: segment, downloadUrl: 'https://example.invalid', checksum: md5(segment), sizeInBytes: 1 }] });
   const view = {
     requestId: REQUEST,
     data: includeInstances ? [
@@ -191,24 +192,106 @@ test('fetch exits 1 with guidance when the request has no matching reports', t =
   assert.match(r.stderr, /No "App Store Discovery and Engagement Standard"/);
 });
 
+// Fourteen days, 2026-01-05..18. Week two halves search page views and product page downloads.
+function dailyFiles(t) {
+  const dir = scratch(t);
+  const days = Array.from({ length: 14 }, (_, i) => `2026-01-${String(5 + i).padStart(2, '0')}`);
+  const engagement = ['Date\tEvent\tPage Type\tSource Type\tTerritory\tCounts', ...days.flatMap((d, i) => [
+    `${d}\tImpression\tNo page\tApp Store search\tUS\t1000`,
+    `${d}\tPage view\tProduct page\tApp Store search\tUS\t${i < 7 ? 200 : 100}`,
+  ])];
+  const downloads = ['Date\tDownload Type\tPage Type\tSource Type\tTerritory\tCounts', ...days.flatMap((d, i) => [
+    `${d}\tFirst-time download\tProduct page\tApp Store search\tUS\t${i < 7 ? 50 : 25}`,
+    `${d}\tFirst-time download\tNo page\tApp Store search\tUS\t40`,
+  ])];
+  const files = { s1: path.join(dir, 'e1.tsv'), s2: path.join(dir, 'e2.tsv'), s3: path.join(dir, 'd1.tsv'), s4: path.join(dir, 'd2.tsv') };
+  writeFileSync(files.s1, [engagement[0], ...engagement.slice(1, 15)].join('\n'));
+  writeFileSync(files.s2, [engagement[0], ...engagement.slice(15)].join('\n'));
+  writeFileSync(files.s3, [downloads[0], ...downloads.slice(1, 15)].join('\n'));
+  writeFileSync(files.s4, [downloads[0], ...downloads.slice(15)].join('\n'));
+  return files;
+}
+
 test('monitor compares the last complete week with the baseline, saves a report, and exits 3 on a drop', t => {
-  const asc = fakeAsc(t);
+  const asc = fakeAsc(t, { files: dailyFiles(t) });
   const state = path.join(scratch(t), 'state');
   const r = run(['monitor', '--app-id', '111', '--profile', 'demo', '--request-id', REQUEST, '--state-dir', state, '--weeks', '1', '--today', '2026-01-19'], { ASC_BIN: asc.bin });
   assert.equal(r.code, 3, r.stderr);
   assert.deepEqual(r.json.after, { start: '2026-01-12', end: '2026-01-18' });
   assert.deepEqual(r.json.before, { start: '2026-01-05', end: '2026-01-11' });
-  assert.ok(r.json.findings.some(f => f.segment === 'App Store search|US' && f.metric === 'viewRate'));
+  assert.ok(r.json.findings.some(f => f.segment === 'App Store search|US' && f.metric === 'viewRate' && f.direction === 'down'));
+  assert.ok(!r.json.findings.some(f => f.metric === 'impressions'), 'steady impressions stay quiet');
   const saved = JSON.parse(readFileSync(path.join(state, 'reports', '2026-01-18.json'), 'utf8'));
   assert.equal(saved.findings.length, r.json.findings.length);
 });
 
-test('monitor fails instead of inventing numbers when the week has no data yet', t => {
-  const asc = fakeAsc(t);
-  const state = path.join(scratch(t), 'state');
-  const r = run(['monitor', '--app-id', '111', '--profile', 'demo', '--request-id', REQUEST, '--state-dir', state, '--weeks', '1', '--today', '2026-02-02'], { ASC_BIN: asc.bin });
+test('monitor scales a baseline with fewer days of data instead of reporting a false drop or rise', t => {
+  const asc = fakeAsc(t, { files: dailyFiles(t) });
+  const r = run(['monitor', '--app-id', '111', '--profile', 'demo', '--request-id', REQUEST, '--state-dir', path.join(scratch(t), 'state'), '--weeks', '4', '--today', '2026-01-19'], { ASC_BIN: asc.bin });
+  assert.equal(r.code, 3, r.stderr);
+  assert.equal(r.json.beforeScale, 1);
+  assert.ok(!r.json.findings.some(f => f.metric === 'impressions'));
+  assert.ok(r.json.warnings.some(w => /7 of 28 days/.test(w)));
+});
+
+test('monitor refuses a week that is not complete yet', t => {
+  const files = dailyFiles(t);
+  writeFileSync(files.s4, readFileSync(files.s4, 'utf8').split('\n').filter(l => !/^2026-01-1[78]/.test(l)).join('\n'));
+  writeFileSync(files.s2, readFileSync(files.s2, 'utf8').split('\n').filter(l => !/^2026-01-1[78]/.test(l)).join('\n'));
+  const asc = fakeAsc(t, { files });
+  const r = run(['monitor', '--app-id', '111', '--profile', 'demo', '--request-id', REQUEST, '--state-dir', path.join(scratch(t), 'state'), '--weeks', '1', '--today', '2026-01-19'], { ASC_BIN: asc.bin });
   assert.equal(r.code, 1);
-  assert.match(r.stderr, /No data for/);
+  assert.match(r.stderr, /Only 5 of 7 days/);
+});
+
+test('download rate counts only product page downloads, so search-result downloads cannot break it', t => {
+  const files = dailyFiles(t);
+  const r = run(['snapshot', '--engagement', files.s1, '--downloads', files.s3, '--start', '2026-01-05', '--end', '2026-01-11', '--app-id', '111']);
+  assert.equal(r.code, 0, r.stderr);
+  const us = r.json.segments['App Store search|US'];
+  assert.equal(us.firstDownloads, 630);
+  assert.equal(us.productPageDownloads, 350);
+  assert.equal(us.downloadRate, 0.25);
+  assert.equal(us.conversionRate, 0.09);
+});
+
+test('compare skips a rate whose numerator exceeds its denominator instead of reporting it quiet', t => {
+  const dir = scratch(t);
+  const snap = (views, pageDownloads) => {
+    const m = { impressions: 10000, productPageViews: views, firstDownloads: 3000, productPageDownloads: pageDownloads, redownloads: 0 };
+    return { schemaVersion: 2, appId: '111', window: { start: '2026-01-05', end: '2026-01-11' }, segments: {}, total: m, coverage: { days: 7, expected: 7 } };
+  };
+  writeFileSync(path.join(dir, 'b.json'), JSON.stringify(snap(1000, 3000)));
+  writeFileSync(path.join(dir, 'a.json'), JSON.stringify(snap(1000, 1500)));
+  const r = run(['compare', '--before', path.join(dir, 'b.json'), '--after', path.join(dir, 'a.json')]);
+  assert.ok(r.json.skipped.some(s => s.segment === 'total' && /downloadRate: productPageDownloads exceeds productPageViews/.test(s.reason)));
+});
+
+test('a date split across segment files of one instance counts every segment', t => {
+  const dir = scratch(t);
+  const header = 'Date\tEvent\tPage Type\tSource Type\tTerritory\tCounts';
+  const us = path.join(dir, 'us.tsv');
+  const jp = path.join(dir, 'jp.tsv');
+  writeFileSync(us, `${header}\n2026-01-05\tImpression\tNo page\tApp Store search\tUS\t1000`);
+  writeFileSync(jp, `${header}\n2026-01-05\tImpression\tNo page\tApp Store search\tJP\t500`);
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', `
+    import { buildSnapshot } from ${JSON.stringify(script)};
+    const s = buildSnapshot({ engagement: [{ file: ${JSON.stringify(us)}, instance: 'i1' }, { file: ${JSON.stringify(jp)}, instance: 'i1' }], downloads: [${JSON.stringify(fx('downloads-before.tsv'))}], appId: '111', start: '2026-01-05', end: '2026-01-05' });
+    process.stdout.write(String(s.total.impressions));
+  `], { encoding: 'utf8' });
+  assert.equal(r.stdout, '1500', r.stderr);
+});
+
+test('fetch downloads a damaged earlier file again', t => {
+  const asc = fakeAsc(t);
+  const dest = path.join(scratch(t), 'raw');
+  const args = ['fetch', '--profile', 'demo', '--request-id', REQUEST, '--granularity', 'DAILY', '--dest', dest];
+  assert.equal(run(args, { ASC_BIN: asc.bin }).code, 0);
+  const manifest = JSON.parse(readFileSync(path.join(dest, 'manifest.json'), 'utf8'));
+  writeFileSync(path.join(dest, manifest.files[0].file), 'truncated');
+  const again = run(args, { ASC_BIN: asc.bin });
+  assert.equal(again.code, 0, again.stderr);
+  assert.deepEqual(again.json.downloaded, [manifest.files[0].file]);
 });
 
 test('unknown flags and commands are rejected', () => {

@@ -44,9 +44,9 @@ Analytics requests, listing writes, and creative uploads are separate effects. A
 ## Diagnose
 
 1. `fetch` the App Store Discovery and Engagement Standard and App Downloads Standard reports with `--granularity DAILY`, so any whole-day window works. Each daily instance repeats the previous few days; `snapshot` counts each date once, from the last file given, so pass files oldest-processed first. Weekly instances date every row by its week start.
-2. Build a `snapshot` for the window in question and one for a comparable baseline. Use whole weeks, and match seasonality when the user knows it matters.
+2. Build a `snapshot` for the window in question and one for a comparable baseline. Use whole weeks, and match seasonality when the user knows it matters. `compare` scales the baseline's counts to the window's days with data, so a longer baseline is fine.
 3. `compare` them. Findings already pass a minimum volume and a significance test, and carry the fields from the script's funnel table. The impressions test assumes Poisson noise, and real traffic swings more than that, so treat an impressions finding near the threshold as weak. Read `skipped` too: a small app can be too small to conclude anything for a segment, and saying so is a valid result.
-4. Find the weakest stage in absolute terms as well as in change. Low impressions points at discoverability; a low view rate at what shows in search and browse; a low download rate at the product page itself.
+4. Find the weakest stage in absolute terms as well as in change. Low impressions points at discoverability; a low view rate at what shows in search and browse; a low download rate at the product page itself. The download rate counts only downloads from the product page; conversion counts every first-time download, including Get taps in search results.
 5. Explain each number before acting on it. A release, a featuring, a seasonal swing, a pricing change, or a reporting lag can move a metric without any listing change.
 
 ## Propose
@@ -61,6 +61,6 @@ Record each shipped change with its date and fields in `<state-dir>/changes.json
 
 ## Monitor
 
-`node scripts/listing.mjs monitor` compares the last complete week with the average of the previous weeks for one app. It exits 0 when quiet, 3 when it has findings, and 1 on error, so a scheduled task can stay silent unless something changed. State lives in `~/.local/state/app-store-listing/<appId>` unless `--state-dir` says otherwise.
+`node scripts/listing.mjs monitor` compares the last complete Monday to Sunday week with the previous weeks, scaled to one week, for one app. It refuses a week that does not yet have all 7 days of data. It exits 0 when quiet, 3 when it has findings, and 1 on error, so a scheduled task can stay silent unless something changed. State lives in `~/.local/state/app-store-listing/<appId>` unless `--state-dir` says otherwise.
 
 Schedule one task per app, weekly after Apple's Friday weekly reports, running the same command with that app's ID, profile, and request ID. Run it where the `asc` profile already works, and set `ASC_TIMEOUT=120s` because report listings can be slow; do not copy App Store Connect keys into a cloud environment to make a schedule possible. Before setting alert thresholds, review a few weeks of reports to learn the app's normal week-to-week swing.
