@@ -1,0 +1,14 @@
+Date	App Name	App Apple Identifier	Download Type	App Version	Device	Platform Version	Source Type	Page Type	Pre-Order	Territory	Counts
+2026-01-05	Example	111	First-time Download	1.0	iPhone	iOS 26.0	App Store search	Product page	No	US	250
+2026-01-06	Example	111	First-time Download	1.0	iPhone	iOS 26.0	App Store search	Product page	No	US	250
+2026-01-05	Example	111	Redownload	1.0	iPhone	iOS 26.0	App Store search	Product page	No	US	40
+2026-01-06	Example	111	Redownload	1.0	iPhone	iOS 26.0	App Store search	Product page	No	US	40
+2026-01-05	Example	111	Manual update	1.0	iPhone	iOS 26.0	App Store search	Product page	No	US	4999
+2026-01-06	Example	111	Manual update	1.0	iPhone	iOS 26.0	App Store search	Product page	No	US	4999
+2026-01-05	Example	111	First-time Download	1.0	iPhone	iOS 26.0	App Store browse	Product page	No	US	3
+2026-01-06	Example	111	First-time Download	1.0	iPhone	iOS 26.0	App Store browse	Product page	No	US	3
+2026-01-05	Example	111	First-time Download	1.0	iPhone	iOS 26.0	Web referrer	Product page	No	GB	1
+2026-01-06	Example	111	First-time Download	1.0	iPhone	iOS 26.0	Web referrer	Product page	No	GB	1
+2026-01-05	Example	111	First-time Download	1.0	iPhone	iOS 26.0	App referrer	Product page	No	DE	3
+2026-01-06	Example	111	First-time Download	1.0	iPhone	iOS 26.0	App referrer	Product page	No	DE	3
+2026-01-04	Example	111	First-time Download	1.0	iPhone	iOS 26.0	App Store search	Product page	No	US	7777

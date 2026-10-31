@@ -37,6 +37,25 @@ Routine `ios-release` runs preserve assets. Asset upload, assignment, review, an
 publication require their stated scope. The skill documents browser/manual
 fallbacks and does not claim that an upload proves storefront publication.
 
+## App Store Listing
+
+[app-store-listing](skills/app-store-listing/SKILL.md) diagnoses a product page
+from App Store Connect analytics. It turns the standard Discovery and Engagement
+and Downloads reports into funnel snapshots by source and territory, compares
+them with a volume floor and a significance test, and maps each weak stage to the
+listing fields that drive it. Proposals go to their owners: `ios-release` for
+release copy, `app-store-assets` for media, and the ASC skills for keywords and
+field writes.
+
+The `monitor` command is app-agnostic. Schedule one weekly task per app with
+that app's ID, profile, and analytics request; it exits 0 when quiet and 3 when
+it has findings. It never writes to App Store Connect.
+
+```text
+$app-store-listing why did conversion drop last week?
+$app-store-listing propose subtitle and screenshot changes from the funnel.
+```
+
 ## Prerequisites
 
 - Node.js 22.20.0 or newer and npm for `npx` and the local helpers.
