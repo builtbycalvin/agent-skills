@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { gzipSync } from 'node:zlib';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -267,19 +268,41 @@ test('compare skips a rate whose numerator exceeds its denominator instead of re
   assert.ok(r.json.skipped.some(s => s.segment === 'total' && /downloadRate: productPageDownloads exceeds productPageViews/.test(s.reason)));
 });
 
-test('a date split across segment files of one instance counts every segment', t => {
+test('a date split across segment files of one fetched instance counts every segment', t => {
   const dir = scratch(t);
   const header = 'Date\tEvent\tPage Type\tSource Type\tTerritory\tCounts';
-  const us = path.join(dir, 'us.tsv');
-  const jp = path.join(dir, 'jp.tsv');
-  writeFileSync(us, `${header}\n2026-01-05\tImpression\tNo page\tApp Store search\tUS\t1000`);
-  writeFileSync(jp, `${header}\n2026-01-05\tImpression\tNo page\tApp Store search\tJP\t500`);
-  const r = spawnSync(process.execPath, ['--input-type=module', '-e', `
-    import { buildSnapshot } from ${JSON.stringify(script)};
-    const s = buildSnapshot({ engagement: [{ file: ${JSON.stringify(us)}, instance: 'i1' }, { file: ${JSON.stringify(jp)}, instance: 'i1' }], downloads: [${JSON.stringify(fx('downloads-before.tsv'))}], appId: '111', start: '2026-01-05', end: '2026-01-05' });
-    process.stdout.write(String(s.total.impressions));
-  `], { encoding: 'utf8' });
-  assert.equal(r.stdout, '1500', r.stderr);
+  const us = path.join(dir, 'engagement_DAILY_2026-01-06_i1_sA.csv.gz');
+  const jp = path.join(dir, 'engagement_DAILY_2026-01-06_i1_sB.csv.gz');
+  writeFileSync(us, gzipSync(`${header}\n2026-01-05\tImpression\tNo page\tApp Store search\tUS\t1000`));
+  writeFileSync(jp, gzipSync(`${header}\n2026-01-05\tImpression\tNo page\tApp Store search\tJP\t500`));
+  const r = run(['snapshot', '--engagement', us, jp, '--downloads', fx('downloads-before.tsv'), '--start', '2026-01-05', '--end', '2026-01-05', '--app-id', '111']);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.json.total.impressions, 1500);
+});
+
+test('a short baseline cannot make a rate change significant by being scaled up', t => {
+  const dir = scratch(t);
+  const snap = (days, impressions, views) => ({
+    schemaVersion: 2, appId: '111', window: { start: '2026-01-01', end: '2026-01-28' }, segments: {},
+    total: { impressions, productPageViews: views, firstDownloads: 0, productPageDownloads: 0, redownloads: 0 },
+    coverage: { days, expected: days },
+  });
+  writeFileSync(path.join(dir, 'b.json'), JSON.stringify(snap(2, 300, 60)));
+  writeFileSync(path.join(dir, 'a.json'), JSON.stringify(snap(28, 4200, 714)));
+  const r = run(['compare', '--before', path.join(dir, 'b.json'), '--after', path.join(dir, 'a.json')]);
+  assert.equal(r.json.beforeScale, 14);
+  assert.ok(!r.json.findings.some(f => f.metric === 'viewRate'), JSON.stringify(r.json.findings));
+  assert.ok(r.json.skipped.some(s => /viewRate: impressions|productPageViews below/.test(s.reason) || /impressions below/.test(s.reason)));
+});
+
+test('a day without any traffic inside the delivered span still counts as covered', t => {
+  const dir = scratch(t);
+  const header = 'Date\tEvent\tPage Type\tSource Type\tTerritory\tCounts';
+  const file = path.join(dir, 'e.tsv');
+  writeFileSync(file, [header, '2026-01-05\tImpression\tNo page\tApp Store search\tUS\t5', '2026-01-07\tImpression\tNo page\tApp Store search\tUS\t5'].join('\n'));
+  const r = run(['snapshot', '--engagement', file, '--downloads', fx('downloads-before.tsv'), '--start', '2026-01-05', '--end', '2026-01-08', '--app-id', '111']);
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(r.json.coverage, { days: 3, expected: 4 });
 });
 
 test('fetch downloads a damaged earlier file again', t => {

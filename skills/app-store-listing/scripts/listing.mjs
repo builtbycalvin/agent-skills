@@ -10,12 +10,14 @@ import { gunzipSync } from 'node:zlib';
 // Data shape.
 //   Metrics  = { impressions, productPageViews, firstDownloads, productPageDownloads, redownloads, viewRate, downloadRate, conversionRate }
 //   Snapshot = { schemaVersion: 2, appId, window: { start, end }, segments: { "<sourceType>|<territory>": Metrics }, total: Metrics, coverage }
-// Snapshots hold raw counts; compare scales the before window to the after window's day count.
+// Snapshots hold raw counts. coverage.days counts window days inside the span the files cover, so a day
+// with no traffic still counts. compare tests rates on raw counts and scales only the impressions count test.
 //   Finding  = { segment, metric, before, after, change, significance, test, direction, fields }
 // Segment keys use "*" as the wildcard: "<source>|*" groups by source only, "*|<territory>" by territory only.
 
 const fail = message => { throw new Error(message); };
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const FETCHED_FILE = /^(?:engagement|downloads)_[A-Z]+_[0-9-]+_([^_]+)_[^_]+\.csv\.gz$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // One table drives which listing fields to inspect for each funnel metric.
@@ -129,7 +131,6 @@ export function buildSnapshot({ engagement, downloads, appId, start, end }) {
   if (!downloads.length) fail('At least one --downloads file is required');
 
   const groups = new Map();
-  const dates = new Set();
   const add = (source, territory, fields, count) => {
     for (const key of [`${source}|${territory}`, `${source}|*`, `*|${territory}`, 'total']) {
       if (!groups.has(key)) groups.set(key, emptyCounts());
@@ -141,16 +142,18 @@ export function buildSnapshot({ engagement, downloads, appId, start, end }) {
 
   // Apple re-delivers each date in several consecutive daily instances, and may split one instance
   // into several segment files. Count each date once per report, from the last instance that contains
-  // it. Entries are paths or { file, instance }; a bare path is its own instance. Pass them oldest-processed first.
-  const latestRows = (entries, required) => {
-    const tables = entries.map(entry => {
-      const file = typeof entry === 'string' ? entry : entry.file;
-      const instance = typeof entry === 'string' ? entry : entry.instance ?? entry.file;
+  // it. fetch names files <kind>_<granularity>_<processingDate>_<instanceId>_<segmentId>.csv.gz; any
+  // other file is its own instance. Pass files oldest-processed first.
+  const span = new Set();
+  const latestRows = (files, required) => {
+    const tables = files.map(file => {
+      const instance = FETCHED_FILE.exec(path.basename(file))?.[1] ?? file;
       const table = readTable(file);
       const c = columns(table, required);
       const appCol = table.header.indexOf('app apple identifier');
-      const rows = table.rows.map((cells, n) => ({ cells, line: n + 2, date: isoDate(cells[c.date], table, n + 2) }));
-      return { instance, table, c, rows: rows.filter(r => inWindow(r.date, start, end) && sameApp(r.cells, appCol)) };
+      const rows = table.rows.map((cells, n) => ({ cells, line: n + 2, date: isoDate(cells[c.date], table, n + 2) })).filter(r => sameApp(r.cells, appCol));
+      for (const r of rows) span.add(r.date);
+      return { instance, table, c, rows: rows.filter(r => inWindow(r.date, start, end)) };
     });
     const owner = new Map();
     for (const t of tables) for (const r of t.rows) owner.set(r.date, t.instance);
@@ -160,7 +163,6 @@ export function buildSnapshot({ engagement, downloads, appId, start, end }) {
   for (const { cells, line, date, table, c } of latestRows(engagement, ['date', 'event', 'page type', 'source type', 'territory', 'counts'])) {
     const event = slug(cells[c.event]).toLowerCase();
     const count = parseCount(cells[c.counts], table, line);
-    dates.add(date);
     let field = null;
     if (event === 'impression') field = 'impressions';
     else if (event === 'page view' && slug(cells[c['page type']]).toLowerCase() === 'product page') field = 'productPageViews';
@@ -170,12 +172,13 @@ export function buildSnapshot({ engagement, downloads, appId, start, end }) {
   for (const { cells, line, date, table, c } of latestRows(downloads, ['date', 'download type', 'page type', 'source type', 'territory', 'counts'])) {
     const type = slug(cells[c['download type']]).toLowerCase().replace(/[\s_]+/g, '-');
     const count = parseCount(cells[c.counts], table, line);
-    dates.add(date);
     const fromPage = slug(cells[c['page type']]).toLowerCase() === 'product page';
     const fields = type === 'first-time-download' ? (fromPage ? ['firstDownloads', 'productPageDownloads'] : ['firstDownloads']) : type === 'redownload' ? ['redownloads'] : [];
     add(slug(cells[c['source type']]), slug(cells[c.territory]), fields, count);
   }
 
+  const window = daysBetween(start, end);
+  const [first, last] = [[...span].sort()[0], [...span].sort().at(-1)];
   const segments = {};
   for (const key of [...groups.keys()].filter(k => k !== 'total').sort()) segments[key] = metricsFrom(groups.get(key));
   return {
@@ -184,7 +187,7 @@ export function buildSnapshot({ engagement, downloads, appId, start, end }) {
     window: { start, end },
     segments,
     total: metricsFrom(groups.get('total') ?? emptyCounts()),
-    coverage: { days: dates.size, expected: daysBetween(start, end).length },
+    coverage: { days: window.filter(d => d >= first && d <= last).length, expected: window.length },
   };
 }
 
@@ -192,12 +195,13 @@ export function buildSnapshot({ engagement, downloads, appId, start, end }) {
 
 const round = (value, places = 4) => (value === null ? null : Number(value.toFixed(places)));
 
-function evaluate(metric, before, after, minEvents) {
+function evaluate(metric, before, after, minEvents, scale) {
   const t = TESTS[metric];
   if (t.kind === 'count') {
+    // Poisson difference of after and scale * before: Var = after + scale^2 * before.
     const a = before[t.value], b = after[t.value];
-    const z = a + b > 0 ? (b - a) / Math.sqrt(a + b) : 0;
-    return { before: a, after: b, z, test: 'count' };
+    const variance = b + scale * scale * a;
+    return { before: a * scale, after: b, z: variance > 0 ? (b - a * scale) / Math.sqrt(variance) : 0, test: 'count' };
   }
   const n1 = before[t.den], n2 = after[t.den];
   if (n1 < minEvents || n2 < minEvents) return { skip: `${t.den} below ${minEvents} (before=${round(n1, 1)}, after=${round(n2, 1)})` };
@@ -222,12 +226,11 @@ export function compareSnapshots(before, after, { minEvents = 200, z = 2 } = {})
     if (s.coverage && s.coverage.days < s.coverage.expected) warnings.push(`${name} window has data for ${s.coverage.days} of ${s.coverage.expected} days`);
   }
   if (!before.coverage.days || !after.coverage.days) fail('Both snapshots need at least one day of data');
-  // Scale before counts to the after window's length, so windows of different lengths or coverage compare per day.
+  // Rates need no scaling. The impressions count compares per covered day, so its before value is scaled.
   const scale = after.coverage.days / before.coverage.days;
-  const scaled = m => m && metricsFrom(Object.fromEntries(COUNTS.map(k => [k, (m[k] ?? 0) * scale])));
   const keys = new Set([...Object.keys(before.segments), ...Object.keys(after.segments)]);
-  const entries = [['total', scaled(before.total), after.total]];
-  for (const key of [...keys].sort()) entries.push([key, scaled(before.segments[key]), after.segments[key]]);
+  const entries = [['total', before.total, after.total]];
+  for (const key of [...keys].sort()) entries.push([key, before.segments[key], after.segments[key]]);
 
   for (const [segment, b, a] of entries) {
     if (!b || !a) { skipped.push({ segment, reason: `present only in the ${b ? 'before' : 'after'} snapshot` }); continue; }
@@ -236,7 +239,7 @@ export function compareSnapshots(before, after, { minEvents = 200, z = 2 } = {})
       continue;
     }
     for (const metric of Object.keys(FUNNEL)) {
-      const r = evaluate(metric, b, a, minEvents);
+      const r = evaluate(metric, b, a, minEvents, scale);
       if (r.skip) { skipped.push({ segment, reason: `${metric}: ${r.skip}` }); continue; }
       if (Math.abs(r.z) < z) continue;
       findings.push({
@@ -366,7 +369,7 @@ export function monitor({ appId, profile, requestId, stateDir, weeks = 4, minEve
   // An instance contains only dates before its processing date, so older instances cannot hold window data.
   fetchReports({ appId, profile, requestId, granularity: 'DAILY', since: baseline.start, dest: raw });
   const manifest = JSON.parse(readFileSync(path.join(raw, 'manifest.json'), 'utf8'));
-  const pick = kind => manifest.files.filter(f => f.kind === kind && f.granularity === 'DAILY').map(f => ({ file: path.join(raw, f.file), instance: f.instanceId }));
+  const pick = kind => manifest.files.filter(f => f.kind === kind && f.granularity === 'DAILY').map(f => path.join(raw, f.file));
   const input = { engagement: pick('engagement'), downloads: pick('downloads'), appId };
 
   const after = buildSnapshot({ ...input, ...week });
