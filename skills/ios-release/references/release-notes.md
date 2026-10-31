@@ -62,6 +62,17 @@ TestFlight What to Test is optional and task-oriented. Tell testers what to exer
 
 Optional promotional text uses a `## Promotional Text` section with the same locale headings. When present, require every configured locale and enforce Apple's 170-character limit. Keep it absent when the configured policy is `preserve`.
 
+### Promotional text
+
+Promotional text sits above the description, holds up to 170 characters, and can change at any time without a new version. Apple recommends it for timely news, such as sales or upcoming features, and states that it does not affect search ranking ([Creating your product page](https://developer.apple.com/app-store/product-page/)). Write it for every visitor to the page, not only for owners of one device or users of one feature:
+
+- Lead with the benefit most visitors get. Mention a device-specific or niche feature as a clause, not as the whole message, unless most of the audience can use it.
+- Do not open with a version number. Shoppers do not compare versions, and the number dates the copy.
+- Never add keywords; the field is not indexed.
+- Keep it true for every build that can be live while the text is live. Text can outlive the release it was written for.
+
+Staleness check: on every App Store lane, read the live `promotionalText` for every configured locale, even when policy is `preserve`. When it names an older marketing version, a feature that the release removes or renames, or an expired offer, report it as stale with the exact text and propose a replacement. Do not apply it without approval. `preserve` means do not rewrite silently; it never means do not inspect.
+
 ## Approval and gate
 
 Copy approval is field-level and version-specific. An approved source-locale note authorizes localization drafting, not an ASC write. Approval of the complete locale set authorizes local canonical generation only unless the active request already authorizes metadata application.
@@ -82,7 +93,7 @@ The first App Store version has no What's New field. Skip the gate only after a 
 | --- | --- |
 | `whatsNew` | Required for App Store updates and derived from the approved archive. |
 | TestFlight What to Test | Optional, derived from the same evidence when useful. |
-| `promotionalText` | Preserve by default. Draft an optional suggestion when policy is `suggest`; apply only after approval. |
+| `promotionalText` | Preserve by default, but always inspect it for staleness and report stale text. Draft an optional suggestion when policy is `suggest` or the text is stale; apply only after approval. |
 | description, keywords, subtitle, name | Preserve unless the user explicitly requests listing or ASO work. |
 | screenshots and previews | Preserve unless explicitly requested. |
 
