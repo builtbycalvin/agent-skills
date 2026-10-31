@@ -1,0 +1,14 @@
+ counts,TERRITORY,source  type,Page_Type,event,DATE,Mystery Column
+5000,US,App Store search,No page,Impression,2026-01-12,x
+5000,US,App Store search,No page,Impression,2026-01-13,x
+500,US,App Store search,Product page,Page view,2026-01-12,x
+500,US,App Store search,Product page,Page view,2026-01-13,x
+160,US,App Store browse,No page,Impression,2026-01-12,x
+160,US,App Store browse,No page,Impression,2026-01-13,x
+32,US,App Store browse,Product page,Page view,2026-01-12,x
+32,US,App Store browse,Product page,Page view,2026-01-13,x
+28,GB,Web referrer,No page,Impression,2026-01-12,x
+28,GB,Web referrer,No page,Impression,2026-01-13,x
+6,GB,Web referrer,Product page,Page view,2026-01-12,x
+6,GB,Web referrer,Product page,Page view,2026-01-13,x
+99999,US,App Store search,No page,Impression,2026-01-11,x

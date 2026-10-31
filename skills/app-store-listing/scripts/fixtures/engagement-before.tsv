@@ -1,0 +1,18 @@
+Date	App Name	App Apple Identifier	Event	Page Type	Source Type	Engagement Type	Device	Platform Version	Territory	Counts	Unique Counts
+2026-01-05	Example	111	Impression	No page	App Store search	None	iPhone	iOS 26.0	US	5000	4500
+2026-01-06	Example	111	Impression	No page	App Store search	None	iPhone	iOS 26.0	US	5000	4500
+2026-01-05	Example	111	Page view	Product page	App Store search	None	iPhone	iOS 26.0	US	1000	900
+2026-01-06	Example	111	Page view	Product page	App Store search	None	iPhone	iOS 26.0	US	1000	900
+2026-01-05	Example	111	Page view	In-app event	App Store search	None	iPhone	iOS 26.0	US	389	350
+2026-01-06	Example	111	Page view	In-app event	App Store search	None	iPhone	iOS 26.0	US	389	350
+2026-01-05	Example	111	Tap	No page	App Store search	None	iPhone	iOS 26.0	US	150	135
+2026-01-06	Example	111	Tap	No page	App Store search	None	iPhone	iOS 26.0	US	150	135
+2026-01-05	Example	111	Impression	No page	App Store browse	None	iPhone	iOS 26.0	US	150	135
+2026-01-06	Example	111	Impression	No page	App Store browse	None	iPhone	iOS 26.0	US	150	135
+2026-01-05	Example	111	Page view	Product page	App Store browse	None	iPhone	iOS 26.0	US	30	27
+2026-01-06	Example	111	Page view	Product page	App Store browse	None	iPhone	iOS 26.0	US	30	27
+2026-01-05	Example	111	Impression	No page	Web referrer	None	iPhone	iOS 26.0	GB	25	23
+2026-01-06	Example	111	Impression	No page	Web referrer	None	iPhone	iOS 26.0	GB	25	23
+2026-01-05	Example	111	Page view	Product page	Web referrer	None	iPhone	iOS 26.0	GB	5	5
+2026-01-06	Example	111	Page view	Product page	Web referrer	None	iPhone	iOS 26.0	GB	5	5
+2026-01-04	Example	111	Impression	No page	App Store search	None	iPhone	iOS 26.0	US	99999	89999

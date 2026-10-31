@@ -89,7 +89,7 @@ node scripts/release-notes.mjs check --repo <root> --app <key> --version <versio
 
 `missing` means draft the note and pause for copy approval. `conflict` means repair or reapprove stale or malformed copy. Proceed only on `valid`. A first App Store version may be not applicable only when live ASC evidence proves no shipped predecessor. Record that evidence in the release plan. TestFlight lanes never require an App Store release-note archive, though they may use optional What to Test copy.
 
-Routine releases change only `whatsNew`. If `promotionalText` is `suggest`, draft an optional conversion-focused suggestion and ask for copy approval before applying it. `preserve` leaves it untouched but still inspected: on every App Store lane, read the live text and report it when it names an older version, a removed feature, or an expired offer. Follow the promotional text guidance in [release-notes.md](references/release-notes.md#promotional-text) whenever you draft it. Description, keywords, subtitle, name, screenshots, and other listing fields require an explicit metadata or ASO intent. When requested, load `asc-aso-audit` for recommendations and `asc-metadata-sync` for canonical validation and writes. What’s New is conversion copy, not a keyword-indexing surface, so never stuff keywords into it.
+Routine releases change only `whatsNew`. If `promotionalText` is `suggest`, draft an optional conversion-focused suggestion and ask for copy approval before applying it. `preserve` leaves it untouched but still inspected: on every App Store lane, read the live text and report it when it names an older version, a removed feature, or an expired offer. Follow the promotional text guidance in [release-notes.md](references/release-notes.md#promotional-text) whenever you draft it. Description, keywords, subtitle, name, screenshots, and other listing fields require an explicit metadata or ASO intent. When requested, load `app-store-listing` for evidence-backed recommendations and `asc-metadata-sync` for canonical validation and writes. What’s New is conversion copy, not a keyword-indexing surface, so never stuff keywords into it.
 
 ## Build and execute
 
@@ -110,7 +110,7 @@ Load only the leaf skills needed for changing mechanics:
 | TestFlight groups, beta review, notes, and distribution | `asc-testflight-orchestration` |
 | App Store staging and submission | `asc-release-flow` |
 | Canonical metadata validation and writes | `asc-metadata-sync` |
-| Listing and ASO review when explicitly requested | `asc-aso-audit` |
+| Listing and ASO review when explicitly requested | `app-store-listing` |
 | Readiness blockers, stuck review, cancellation, or retry | `asc-submission-health` |
 | Signing diagnosis or setup | `asc-signing-setup` |
 | An explicitly requested canonical resumable workflow | `asc-workflow` |
