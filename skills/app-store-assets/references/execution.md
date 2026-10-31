@@ -71,3 +71,12 @@ With explicit publication authority, use an available supported browser tool and
 If browser control or authentication is unavailable, provide an exact manual packet. Include the approved files and hashes, target app/version/locale, intended placement, asset IDs, before/after diff, ordered steps, validation evidence, and required readback. Do not mark a manual action complete until evidence returns. After a claimed publish, re-read the target placement and inspect the authenticated page or device storefront as available. Record storefront/locale/device/OS and observation time. Report propagation or eligibility uncertainty instead of claiming universal live display.
 
 Uploading a draft to obtain Apple's preview still requires upload authority. Selecting Save can create an assignment. Publish and Submit for Review are separate effects. If the current user requested only a local pipeline or design, stop at the prepared local bundle.
+
+## Placement rules observed live (cubby, 2026-10-31, ASC CLI 5.17.1)
+
+- A version that is Waiting for Review rejects new placements ("not permitted in AppStoreVersion's current state"). Plan version-scoped media before submitting the version, or say plainly that it waits for the next editable state.
+- A Ready for Sale version accepts header and search placements only for assets already APPROVED ("the parent is already approved"). Approve the media first through a standalone review submission, then place it.
+- A standalone asset review submission can be created and submitted while an app version is already Waiting for Review; the two run in parallel.
+- Media placed on an editable version is embedded in that version's review: the version item carries it, and adding the same media as its own item fails with "Asset is locked by an embedded review submission". Place every version-scoped asset before submitting the version, then submit the version alone.
+- Each localization takes one header and one search asset (`DEFAULT_PROFILE`, max 1). Placing the video uses its poster frame as the still, so a separate still image is a fallback for re-use, not a second placement.
+- Placements live on version localizations. A new version starts without the previous version's header and search placements, so re-place approved creative on each newly released version.

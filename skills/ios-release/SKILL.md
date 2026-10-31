@@ -60,6 +60,15 @@ Accept an explicit marketing version after checking repository and ASC conflicts
 
 Show the current shipped version, repository version, evidence category, and recommendation. Obtain confirmation before changing a marketing version. Version confirmation does not authorize an upload, distribution, staging, or submission that the request did not already authorize.
 
+## Check the App Store path early
+
+Run these read-only checks on every lane that will eventually reach the App Store, including TestFlight, and report blockers before building. They are cheap to read and expensive to discover at submission time.
+
+- **Pending version.** List the app's versions. App Store Connect creates a new version only after the current one is Ready for Distribution ([Create a new version](https://developer.apple.com/help/app-store-connect/update-your-app/create-a-new-version)). When a version is Waiting for Review or In Review, the new version cannot be staged until that one is approved, or until it is removed from review, which loses its queue position. Say this at planning time and let the user choose; never remove a version from review without explicit approval.
+- **Privacy label drift.** Compare the app's `PrivacyInfo.xcprivacy` collected data types, linkage, tracking, and purposes with the App Privacy answers in App Store Connect. The answers are not readable through the API, so ask the user for the current answers or a screenshot. Report each mismatch, especially data declared linked in the manifest but answered "not linked" in App Store Connect. The user edits the label on the website.
+- **Prepared but unplaced media.** Look for new store assets in the repository's asset paths (screenshots, previews, header and search creative) that are not yet placed on the target version. Ask whether they ship with this version before submitting: a version in review rejects new placements, so adding them later means withdrawing the version and losing its queue position. A request for "copy" covers text fields only; it is not approval to upload media, and media is not something to skip silently.
+- **Localization gaps.** For each configured locale, scan the app's string catalog for missing or untranslated entries, including plural and device variants. A string that falls back to the source language in a translated UI is a shipping defect, not a cosmetic note.
+
 ## Prepare release copy
 
 Read [release-notes.md](references/release-notes.md). This skill owns the normalized release-note process. Do not require `ios-whats-new` or `asc-whats-new-writer`.
@@ -80,7 +89,7 @@ node scripts/release-notes.mjs check --repo <root> --app <key> --version <versio
 
 `missing` means draft the note and pause for copy approval. `conflict` means repair or reapprove stale or malformed copy. Proceed only on `valid`. A first App Store version may be not applicable only when live ASC evidence proves no shipped predecessor. Record that evidence in the release plan. TestFlight lanes never require an App Store release-note archive, though they may use optional What to Test copy.
 
-Routine releases change only `whatsNew`. If `promotionalText` is `suggest`, draft an optional conversion-focused suggestion and ask for copy approval before applying it. `preserve` leaves it untouched. Description, keywords, subtitle, name, screenshots, and other listing fields require an explicit metadata or ASO intent. When requested, load `asc-aso-audit` for recommendations and `asc-metadata-sync` for canonical validation and writes. What’s New is conversion copy, not a keyword-indexing surface, so never stuff keywords into it.
+Routine releases change only `whatsNew`. If `promotionalText` is `suggest`, draft an optional conversion-focused suggestion and ask for copy approval before applying it. `preserve` leaves it untouched but still inspected: on every App Store lane, read the live text and report it when it names an older version, a removed feature, or an expired offer. Follow the promotional text guidance in [release-notes.md](references/release-notes.md#promotional-text) whenever you draft it. Description, keywords, subtitle, name, screenshots, and other listing fields require an explicit metadata or ASO intent. When requested, load `asc-aso-audit` for recommendations and `asc-metadata-sync` for canonical validation and writes. What’s New is conversion copy, not a keyword-indexing surface, so never stuff keywords into it.
 
 ## Build and execute
 

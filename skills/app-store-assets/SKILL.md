@@ -42,7 +42,7 @@ An exact imperative can authorize its stated effects without redundant confirmat
 
 ## Produce and approve a bundle
 
-Read [production.md](references/production.md) before generation for current Apple content rules, design guidance, capture, composition, technical validation, safe areas, and visual review. Load only the leaf skills needed for the selected task.
+Read [production.md](references/production.md) before generation for current Apple content rules, design guidance, capture, composition, technical validation, safe areas, and visual review. Load only the leaf skills needed for the selected task. For selected header and search creative, propose video first with a still fallback, and pass the creative video quality gate in production.md before export.
 
 | Need | Reuse |
 | --- | --- |
