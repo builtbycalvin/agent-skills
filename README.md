@@ -19,6 +19,8 @@ $finish-pr finish PR #123, but stop before merging.
 ```
 
 An explicit `finish-pr` request authorizes its normal workflow through merge.
+Once green, it merges without asking for approval again. This authority includes
+existing automatic build, release, and deployment jobs triggered by the merge.
 Narrower instructions and repository protections still apply. Automatic skill
 selection does not add authority. A queued merge is not a completed merge.
 
