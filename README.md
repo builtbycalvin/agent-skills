@@ -2,6 +2,26 @@
 
 Reusable coding-agent workflows by [Calvin](https://github.com/builtbycalvin).
 
+## Finish PR
+
+[finish-pr](skills/finish-pr/SKILL.md) takes the current change or a named PR
+through independent review, fixes, PR creation, CI and review monitoring, and
+confirmed merge. It resumes from existing evidence and reuses an existing PR.
+
+It uses the user's or repository's configured workflows. It explicitly loads
+installed pstack, Compound Engineering, or project-local skills for the phases
+they cover. Neither skill pack is required. Uncovered phases use the host's
+review and forge tools. Missing required capabilities block the affected phase.
+
+```text
+$finish-pr review this change, open and babysit the PR, then merge.
+$finish-pr finish PR #123, but stop before merging.
+```
+
+An explicit `finish-pr` request authorizes its normal workflow through merge.
+Narrower instructions and repository protections still apply. Automatic skill
+selection does not add authority. A queued merge is not a completed merge.
+
 ## iOS Release
 
 [ios-release](skills/ios-release/SKILL.md) configures, inspects, prepares, and
@@ -58,8 +78,14 @@ $app-store-listing propose subtitle and screenshot changes from the funnel.
 
 ## Prerequisites
 
+All skills require an agent with skill support.
+
+`finish-pr` requires authenticated forge access and an independent review
+capability. pstack and Compound Engineering are optional integrations.
+
+The iOS skills require these tools:
+
 - Node.js 22.20.0 or newer and npm for `npx` and the local helpers.
-- An agent with skill support.
 - App Store Connect CLI 5.x and the current
   [ASC skill pack](https://github.com/rorkai/app-store-connect-cli-skills).
 - Xcode and the signing setup required by the target app for local builds.
