@@ -33,6 +33,8 @@ The bare word `release` uses `defaultIntent` only when the user explicitly confi
 
 An exact imperative authorizes the effects in its row. State the exact effect plan before the first remote write. Do not ask for redundant confirmation when app, lane, version, copy, build provenance, and effects are already explicit or already approved during this run.
 
+Check repository commit and push authority during planning. When repository policy requires permission the user has not given, prepare the exact release diff and artifact, then request only the missing Git authority in one question. Do not ask again for an already authorized upload or distribution. Reuse granted authority throughout the run.
+
 ## Configure a project
 
 Read [configuration.md](references/configuration.md).
@@ -64,8 +66,10 @@ Show the current shipped version, repository version, evidence category, and rec
 
 Run these read-only checks on every lane that will eventually reach the App Store, including TestFlight, and report blockers before building. They are cheap to read and expensive to discover at submission time.
 
+For a TestFlight-only request, use available read-only evidence and report App Store readiness gaps as advisory. Do not request App Privacy answers, screenshots, release-copy approval, or store-media decisions for this lane. Ask only when missing information blocks the requested TestFlight operation. Defer App Store decisions until the user requests App Store staging or submission.
+
 - **Pending version.** List the app's versions. App Store Connect creates a new version only after the current one is Ready for Distribution ([Create a new version](https://developer.apple.com/help/app-store-connect/update-your-app/create-a-new-version)). When a version is Waiting for Review or In Review, the new version cannot be staged until that one is approved, or until it is removed from review, which loses its queue position. Say this at planning time and let the user choose; never remove a version from review without explicit approval.
-- **Privacy label drift.** Compare the app's `PrivacyInfo.xcprivacy` collected data types, linkage, tracking, and purposes with the App Privacy answers in App Store Connect. The answers are not readable through the API, so ask the user for the current answers or a screenshot. Report each mismatch, especially data declared linked in the manifest but answered "not linked" in App Store Connect. The user edits the label on the website.
+- **Privacy label drift.** Compare the app's `PrivacyInfo.xcprivacy` collected data types, linkage, tracking, and purposes with the App Privacy answers in App Store Connect. The answers are not readable through the API. For App Store staging or submission, ask for the current answers or a screenshot when unavailable. For TestFlight-only requests, report the comparison as unverified when current answers are unavailable, and continue. Report each mismatch, especially data declared linked in the manifest but answered "not linked" in App Store Connect. The user edits the label on the website.
 - **Prepared but unplaced media.** Look for new store assets in the repository's asset paths (screenshots, previews, header and search creative) that are not yet placed on the target version. Ask whether they ship with this version before submitting: a version in review rejects new placements, so adding them later means withdrawing the version and losing its queue position. A request for "copy" covers text fields only; it is not approval to upload media, and media is not something to skip silently.
 - **Localization gaps.** For each configured locale, scan the app's string catalog for missing or untranslated entries, including plural and device variants. A string that falls back to the source language in a translated UI is a shipping defect, not a cosmetic note.
 
