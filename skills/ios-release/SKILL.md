@@ -33,7 +33,7 @@ The bare word `release` uses `defaultIntent` only when the user explicitly confi
 
 An exact imperative authorizes the effects in its row. State the exact effect plan before the first remote write. Do not ask for redundant confirmation when app, lane, version, copy, build provenance, and effects are already explicit or already approved during this run.
 
-An explicit internal TestFlight release request through this skill also authorizes the Git steps in [repository.md](references/repository.md) for that build's required release state. Those steps are a release branch commit, a push to the release branch, a PR, and a merge after review and checks pass. State them in the release plan and reuse that authority without another prompt. Respect narrower user or repository rules and required forge approvals. For other lanes, resolve Git authority from the request and repository policy. If authority is missing, prepare the exact release diff and artifact before asking only for the missing authority.
+An explicit internal TestFlight release includes its required release branch, PR, and merge after review and required checks pass. Treat this as one workflow and carry its scope into `finish-pr`. Respect narrower repository rules and execution approvals. For other lanes, resolve Git authority from the request and repository policy. Ask only for missing authority, with the exact change ready for review.
 
 ## Configure a project
 
@@ -97,7 +97,7 @@ Routine releases change only `whatsNew`. If `promotionalText` is `suggest`, draf
 
 ## Build and execute
 
-For lanes that can change tracked state, read [repository.md](references/repository.md). State repository and upstream state, `sourceCommit`, app identity, profile, Xcode container, scheme, configuration, marketing version, build provenance, archive path and note status, configured post-archive hooks, destination, allowed effects, excluded effects, required checks, and planned readbacks. Resolve the release PR workflow before archiving a build that requires a release commit.
+For lanes that can change tracked state, follow [repository.md](references/repository.md). Before archiving, verify App Store Connect access for the exact target and resolve the Git destination, permissions, and review workflow when a PR is required. State the app, version, build, source commit, release destination, PR target, and required checks. When a release PR is required, verify it through review and checks before upload. After App Store Connect readback, merge that verified PR.
 
 When `xcode.generator` is configured, run that generator from the synchronized commit before every build, archive, or export, then confirm the configured container exists. Treat the regenerated container as the canonical generator output, not as a tracked release-state path.
 
