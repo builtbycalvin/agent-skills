@@ -33,7 +33,7 @@ The bare word `release` uses `defaultIntent` only when the user explicitly confi
 
 An exact imperative authorizes the effects in its row. State the exact effect plan before the first remote write. Do not ask for redundant confirmation when app, lane, version, copy, build provenance, and effects are already explicit or already approved during this run.
 
-Check repository commit and push authority during planning. When repository policy requires permission the user has not given, prepare the exact release diff and artifact, then request only the missing Git authority in one question. Do not ask again for an already authorized upload or distribution. Reuse granted authority throughout the run.
+An explicit internal TestFlight release request through this skill also authorizes the Git steps in [repository.md](references/repository.md) for that build's required release state. Those steps are a release branch commit, a push to the release branch, a PR, and a merge after review and checks pass. State them in the release plan and reuse that authority without another prompt. Respect narrower user or repository rules and required forge approvals. For other lanes, resolve Git authority from the request and repository policy. If authority is missing, prepare the exact release diff and artifact before asking only for the missing authority.
 
 ## Configure a project
 
@@ -97,7 +97,7 @@ Routine releases change only `whatsNew`. If `promotionalText` is `suggest`, draf
 
 ## Build and execute
 
-For lanes that can change tracked state, read [repository.md](references/repository.md). State repository and upstream state, `sourceCommit`, app identity, profile, Xcode container, scheme, configuration, marketing version, build provenance, archive path and note status, configured post-archive hooks, destination, allowed effects, excluded effects, required checks, and planned readbacks.
+For lanes that can change tracked state, read [repository.md](references/repository.md). State repository and upstream state, `sourceCommit`, app identity, profile, Xcode container, scheme, configuration, marketing version, build provenance, archive path and note status, configured post-archive hooks, destination, allowed effects, excluded effects, required checks, and planned readbacks. Resolve the release PR workflow before archiving a build that requires a release commit.
 
 When `xcode.generator` is configured, run that generator from the synchronized commit before every build, archive, or export, then confirm the configured container exists. Treat the regenerated container as the canonical generator output, not as a tracked release-state path.
 
@@ -118,6 +118,7 @@ Load only the leaf skills needed for changing mechanics:
 | Readiness blockers, stuck review, cancellation, or retry | `asc-submission-health` |
 | Signing diagnosis or setup | `asc-signing-setup` |
 | An explicitly requested canonical resumable workflow | `asc-workflow` |
+| Review, checks, and verified merge of the release PR | `finish-pr` |
 
 Do not copy their command recipes here and do not use `asc-workflow` by default. Preserve this skill's narrower effect boundary when a leaf supports broader operations.
 
@@ -127,4 +128,4 @@ For signing fetch or sync push with `--device`, use `--create-missing` only when
 
 If a write times out or returns malformed output, mark the effect `remote-unknown` and inspect live state before retrying. Never repeat an upload while that version and build outcome remains unknown. Continue from observed state and report `partial` when remote and repository outcomes differ.
 
-Return `completed`, `partial`, `blocked`, or `configured`. Include exact versions, commits, remote IDs, post-archive hook outcomes, readback, remaining uncertainty, and one safe next action. Never describe a partial release as successful or widen authority to repair an adjacent problem.
+Return `completed`, `partial`, `blocked`, or `configured`. Include exact versions, commits, the release PR and merge state when applicable, remote IDs, post-archive hook outcomes, readback, remaining uncertainty, and one safe next action. Never describe a partial release as successful or widen authority to repair an adjacent problem.
