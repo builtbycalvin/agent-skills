@@ -33,10 +33,12 @@ releases iOS apps through one entry point. It keeps portable policy in tracked
 reviewable release-note archive for App Store and optional TestFlight copy.
 
 It never stores credentials or standing release authority. Exact release
-requests authorize only their stated TestFlight or App Store lane. When the
-canonical workflow changes tracked release state, the skill commits the exact
-generated state and reconciles that commit with the verified upstream. Git
-tags, tag pushes, and GitHub releases remain separate effects.
+requests authorize their stated TestFlight or App Store lane. An explicit
+internal TestFlight release also authorizes its release PR. When a release
+changes tracked state, the skill commits the exact archived tree on a release
+branch. After App Store Connect readback, it uses `finish-pr` to review and
+merge the release PR once the checks pass. Git tags, tag pushes, and GitHub
+releases remain separate effects.
 
 ## App Store Assets
 

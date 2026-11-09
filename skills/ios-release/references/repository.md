@@ -13,11 +13,11 @@ A fresh release that changes tracked state requires all of these facts:
 - The branch has one configured upstream.
 - Local `HEAD`, the local upstream ref, and the fetched remote ref have the same commit.
 
-Record that commit as `sourceCommit`. Stop before version changes or remote effects when the branch is ahead, behind, or diverged.
+Record that commit as `sourceCommit`. Record the repository, remote, and upstream branch as the PR destination. Stop before version changes or remote effects when the branch is ahead, behind, or diverged.
 
 Complete this gate before writing a tracked release-note archive. Draft and approve the note without changing tracked files, then write it after `sourceCommit` is recorded.
 
-Do not pull, merge, rebase, switch branches, or discard changes to satisfy this gate.
+Do not pull, merge, rebase, switch branches, or discard changes to satisfy this gate. If the lane will publish a release commit, create a dedicated release branch at `sourceCommit` before changing tracked release files. Keep the original branch and its upstream intact.
 
 ## Bind the archive to one release commit
 
@@ -31,7 +31,7 @@ After changing the version or build:
 4. Run the repository's drift check.
 5. Record the staged Git tree ID.
 6. Archive and export that exact staged tree.
-7. Commit the release state once before upload.
+7. Commit the release state once on the release branch before upload.
 8. Require a clean worktree.
 
 Record the new `HEAD` as `releaseCommit`. Verify that its sole parent is `sourceCommit`, that its tree ID equals the archived tree ID, and that its changed paths are within the allowed set.
@@ -40,34 +40,21 @@ If generation, archive, or export fails, restore the exact changed paths to `sou
 
 A wrapper that commits only the manifest while leaving canonical generated output dirty is not release-safe.
 
-When the lane reuses an existing build and changes no tracked state, use the synchronized `HEAD` as both `sourceCommit` and `releaseCommit`.
+When the lane reuses an existing build and changes no tracked state, use the synchronized `HEAD` as both `sourceCommit` and `releaseCommit`. Skip the release PR when there is no tracked change. Local-only lanes do not publish a release PR.
 
-When resuming a release that already has a committed note archive, preserve the
-archive's original `sourceCommit`. A clean attached `HEAD` may be one intentionally
-unpushed `releaseCommit` ahead of the fetched upstream only when the upstream still
-equals that archived source, `releaseCommit` has `sourceCommit` as its sole parent,
-its tree and changed paths match the recorded release artifact and allowlist, and
-its committed note file exactly matches the archive being checked. Resume by
-reading the exact remote build and release state; do not rebuild, re-upload, or
-rewrite the archive identity. When synchronized `HEAD` is both `sourceCommit` and
-`releaseCommit`, require the committed note match but not the distinct-commit parent,
-tree, or changed-path proof.
+When resuming, recover the recorded `sourceCommit`, `releaseCommit`, release branch, and PR destination. If the commits differ, verify the release commit's parent, tree, and changed paths against the archive and allowlist. If the release has a committed note, preserve its original source commit and verify the committed note matches the archive. Read the exact remote build state and look up the existing release PR by head and destination. If it already merged, verify the merge and tree before checking for destination drift. Resume the unfinished step without repeating an observed upload or creating a duplicate PR.
 
-## Push only after remote readback
+## Merge through a PR after remote readback
 
-After App Store Connect exposes the exact successful state, fetch the original upstream again.
+After App Store Connect exposes the exact successful state for the requested lane, fetch the PR destination again. If the destination advanced, keep the archived release commit and report `partial` with the exact remote release state. Do not rewrite or replace the release commit to make the PR mergeable.
 
-If the upstream still equals `sourceCommit`, push this exact refspec without force:
+If the destination still equals `sourceCommit`, publish only the release branch. Open or reuse one PR from the release branch to the recorded destination. Never commit on or push directly to the destination branch.
 
-```bash
-git push --porcelain <remote> <releaseCommit>:<branch-ref>
-```
+Run `finish-pr` with the existing release authority and the exact head and base. Require independent review, passing required checks, required approvals, and no unresolved blockers. Keep the archived release tree fixed. If review requires changes to that tree, stop and report `partial` rather than changing the release PR or uploading again.
 
-Read the remote branch after the push. Treat the repository as reconciled only when the remote branch equals `releaseCommit`.
+Before merge, confirm the PR still targets the recorded destination at `sourceCommit` and its head is `releaseCommit`. Use the repository's required merge method with a server-enforced head condition. Use a merge queue or auto-merge only if repository rules enforce the verified head and base at landing. Read back the merged PR and fetch the destination. Confirm its history contains the PR's merge commit and that the merge commit's tree matches the archived release tree. The final base read cannot prevent a concurrent base update. If the merge tree differs, report `partial` with both trees.
 
-If the push command fails, read the remote ref before classifying the result. The command can fail after the server accepted the update.
-
-If the upstream moved or still points to `sourceCommit`, preserve `releaseCommit` and return `partial`. Do not merge, rebase, force-push, open a pull request, or repeat an upload. Report the exact remote release state, both commit IDs, the observed upstream commit, and one repository-policy-safe next action.
+If a Git or PR operation fails or times out, read back the exact remote ref or PR before retrying. Return `partial` if the release succeeded but the PR cannot merge or the merge cannot be verified. Include the release commit, PR, observed destination, and the exact missing gate. Do not bypass a protection or force-push.
 
 ## Keep adjacent publishing separate
 
@@ -79,7 +66,7 @@ The release request does not authorize:
 - a tag push;
 - a GitHub Release;
 - unrelated commits;
-- a pull request;
-- a merge or force-push.
+- an unrelated pull request or merge;
+- a force-push.
 
 Perform an adjacent effect only when the current request names it or the repository policy makes it an explicit part of the selected release lane.
