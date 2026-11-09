@@ -4,20 +4,11 @@ Read this reference for a release lane that can change tracked files.
 
 ## Start from one source commit
 
-Resolve the current branch and its configured upstream. Fetch that upstream without tags.
+Resolve the release base from repository policy and verify its remote tip with a fetch. Record the repository, remote, base branch, and fetched commit as the PR destination and `sourceCommit`. If policy requires a clean synchronized local base checkout, verify it first.
 
-A fresh release that changes tracked state requires all of these facts:
+For a new release from the base branch, use a dedicated release branch at `sourceCommit`. If the current checkout is detached, dirty, or on another branch, use a clean isolated worktree at `sourceCommit` when repository policy permits. Preserve the original checkout and index. If the user asked to release changes outside the verified base, resolve that source explicitly before proceeding.
 
-- `HEAD` is attached to the repository's release branch.
-- The worktree and index are clean.
-- The branch has one configured upstream.
-- Local `HEAD`, the local upstream ref, and the fetched remote ref have the same commit.
-
-Record that commit as `sourceCommit`. Record the repository, remote, and upstream branch as the PR destination. Stop before version changes or remote effects when the branch is ahead, behind, or diverged.
-
-Complete this gate before writing a tracked release-note archive. Draft and approve the note without changing tracked files, then write it after `sourceCommit` is recorded.
-
-Do not pull, merge, rebase, switch branches, or discard changes to satisfy this gate. If the lane will publish a release commit, create a dedicated release branch at `sourceCommit` before changing tracked release files. Keep the original branch and its upstream intact.
+Before writing a tracked release note, record `sourceCommit` and approve the copy. Keep release credentials and local configuration outside tracked state.
 
 ## Bind the archive to one release commit
 
@@ -44,17 +35,21 @@ When the lane reuses an existing build and changes no tracked state, use the syn
 
 When resuming, recover the recorded `sourceCommit`, `releaseCommit`, release branch, and PR destination. If the commits differ, verify the release commit's parent, tree, and changed paths against the archive and allowlist. If the release has a committed note, preserve its original source commit and verify the committed note matches the archive. Read the exact remote build state and look up the existing release PR by head and destination. If it already merged, verify the merge and tree before checking for destination drift. Resume the unfinished step without repeating an observed upload or creating a duplicate PR.
 
-## Merge through a PR after remote readback
+## Verify the release PR before upload
 
-After App Store Connect exposes the exact successful state for the requested lane, fetch the PR destination again. If the destination advanced, keep the archived release commit and report `partial` with the exact remote release state. Do not rewrite or replace the release commit to make the PR mergeable.
+For a tracked release, verify authenticated forge access, destination rules, merge method, and review capability before archiving. Read-only preflight cannot establish permission for a later write.
 
-If the destination still equals `sourceCommit`, publish only the release branch. Open or reuse one PR from the release branch to the recorded destination. Never commit on or push directly to the destination branch.
+Once the release commit matches the archived tree, confirm the base still equals `sourceCommit`. Use `finish-pr` with the release authority, an explicit stop before merge, and review-only scope for the fixed archive commit. Push only the release branch and open or reuse one PR. Require independent review, passing checks, required approvals, and a mergeable verdict for that head and base. Keep the PR unarmed and verify the repository can hold it open until App Store Connect readback. If a write, check, approval, or hold is blocked, stop before upload. If review requires a change to the archived tree, stop this attempt before upload. Any replacement must pass archive and PR verification again. Recheck the verified head, base, and unarmed PR state before upload.
 
-Run `finish-pr` with the existing release authority and the exact head and base. Require independent review, passing required checks, required approvals, and no unresolved blockers. Keep the archived release tree fixed. If review requires changes to that tree, stop and report `partial` rather than changing the release PR or uploading again.
+Include the authorized effects, exact head and destination in any tool approval request. If the host denies a required write, preserve the release state and report the denied action and reason. Use the host's supported approval flow for any outstanding permission.
 
-Before merge, confirm the PR still targets the recorded destination at `sourceCommit` and its head is `releaseCommit`. Use the repository's required merge method with a server-enforced head condition. Use a merge queue or auto-merge only if repository rules enforce the verified head and base at landing. Read back the merged PR and fetch the destination. Confirm its history contains the PR's merge commit and that the merge commit's tree matches the archived release tree. The final base read cannot prevent a concurrent base update. If the merge tree differs, report `partial` with both trees.
+## Finish the PR after remote readback
 
-If a Git or PR operation fails or times out, read back the exact remote ref or PR before retrying. Return `partial` if the release succeeded but the PR cannot merge or the merge cannot be verified. Include the release commit, PR, observed destination, and the exact missing gate. Do not bypass a protection or force-push.
+Once App Store Connect confirms the exact build and requested lane, continue `finish-pr` through merge. Reuse existing authorization and review evidence that still applies. If the base advances or a fix would change the archived tree, preserve the commit and report the remaining reconciliation.
+
+Confirm the PR head is `releaseCommit` and the base still points at `sourceCommit` immediately before merge. Use the repository's merge method and a server-enforced head condition. Use auto-merge or a queue only if the rules enforce the verified head and base at landing. Read back the merged PR and verify the destination contains its merge commit. Verify the merge tree matches the archived tree. If a concurrent base update changes that tree, report `partial` with both trees.
+
+After an uncertain write, read back the exact remote ref, PR, or build before retrying. Report both the App Store Connect and repository outcomes. If either side succeeded while the other is blocked, report `partial` and identify the unfinished step.
 
 ## Keep adjacent publishing separate
 

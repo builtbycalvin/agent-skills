@@ -36,9 +36,9 @@ It never stores credentials or standing release authority. Exact release
 requests authorize their stated TestFlight or App Store lane. An explicit
 internal TestFlight release also authorizes its release PR. When a release
 changes tracked state, the skill commits the exact archived tree on a release
-branch. After App Store Connect readback, it uses `finish-pr` to review and
-merge the release PR once the checks pass. Git tags, tag pushes, and GitHub
-releases remain separate effects.
+branch. It uses `finish-pr` to verify the PR before upload and merge it after
+App Store Connect readback.
+Git tags, tag pushes, and GitHub releases remain separate effects.
 
 ## App Store Assets
 
